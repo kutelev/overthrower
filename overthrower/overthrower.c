@@ -33,7 +33,8 @@ void* malloc(size_t size)
     if (activated == 0 && size == 0) {
         FILE* file = fopen("/dev/urandom", "rb");
         if (file != NULL) {
-            fread(&seed, 1, sizeof(seed), file);
+            if (fread(&seed, 1, sizeof(seed), file) != sizeof(seed))
+                seed = 0;
             fclose(file);
         }
 
