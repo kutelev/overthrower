@@ -73,7 +73,7 @@ static unsigned int generateRandomValue(const unsigned int min_val, const unsign
             value = (min_val + max_val) / 2;
         fclose(file);
     }
-    value = value % (max_val - min_val);
+    value = value % (max_val - min_val + (max_val == UINT_MAX ? 0 : 1));
     value += min_val;
     return value;
 }
