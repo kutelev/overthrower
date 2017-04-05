@@ -4,7 +4,6 @@
 #include <dlfcn.h>
 #include <errno.h>
 #include <limits.h>
-#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,7 +35,7 @@ static unsigned int seed = 0;
 static unsigned int duty_cycle = 1024;
 static unsigned delay = MIN_DELAY;
 static unsigned duration = MIN_DURATION;
-static atomic_uint malloc_number = 0;
+static unsigned int malloc_number = 0;
 
 __attribute__ ((constructor))
 static void banner()
@@ -128,9 +127,9 @@ static int isTimeTofail()
         case STRATEGY_RANDOM:
             return ((unsigned int)rand() % duty_cycle == 0) ? 1 : 0;
         case STRATEGY_STEP:
-            return (atomic_fetch_add(&malloc_number, 1) + 1 > delay) ? 1 : 0;
+            return (__sync_add_and_fetch(&malloc_number, 1) + 1 > delay) ? 1 : 0;
         case STRATEGY_PULSE: {
-            unsigned long long int number = atomic_fetch_add(&malloc_number, 1) + 1;
+            unsigned int number = __sync_add_and_fetch(&malloc_number, 1) + 1;
             return (number > delay && number < delay + duration) ? 1 : 0;
         }
         default:
