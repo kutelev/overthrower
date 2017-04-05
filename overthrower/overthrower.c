@@ -19,7 +19,7 @@ static Malloc native_malloc = NULL;
 #define STRATEGY_PULSE 2
 
 #define MIN_DUTY_CYCLE 1
-#define MAX_DUTY_CYCLE 32768
+#define MAX_DUTY_CYCLE 4096
 
 #define MIN_DELAY 0
 #define MAX_DELAY 1000
