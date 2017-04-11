@@ -50,15 +50,15 @@ static void initialize()
         native_malloc = (Malloc)dlsym(RTLD_NEXT, "malloc");
 }
 
-static int strToLongInt(const char* str, long int* value)
+static int strToUnsignedLongInt(const char* str, unsigned long int* value)
 {
     char* end_ptr;
-    *value = strtol(str, &end_ptr, 10);
+    *value = strtoul(str, &end_ptr, 10);
 
     if (end_ptr[0] != '\0')
         return -1;
 
-    if ((*value == LONG_MIN || *value == LONG_MAX) && errno == ERANGE)
+    if ((*value == 0 || *value == ULONG_MAX) && errno == ERANGE)
         return -1;
 
     return 0;
@@ -81,14 +81,14 @@ static unsigned int generateRandomValue(const unsigned int min_val, const unsign
 static unsigned int readValFromEnvVar(const char* env_var_name, const unsigned int min_val, const unsigned int max_val)
 {
     const char* env_var_val = getenv(env_var_name);
-    long int value;
+    unsigned long int value;
 
     if (env_var_val == NULL) {
         const unsigned int random_value = generateRandomValue(min_val, max_val);
         fprintf(stderr, "%s environment variable not set. Using a random value (%u).\n", env_var_name, random_value);
         return random_value;
     }
-    else if (strToLongInt(env_var_val, &value) || value < min_val || value > max_val) {
+    else if (strToUnsignedLongInt(env_var_val, &value) || value < min_val || value > max_val) {
         const unsigned int random_value = generateRandomValue(min_val, max_val);
         fprintf(stderr, "%s has incorrect value (%s). Using a random value (%u).\n", env_var_name, env_var_val, random_value);
         return random_value;
