@@ -44,11 +44,13 @@ static void banner()
     fprintf(stderr, "Invoke activateOverthrower and overthrower will start his job.\n");
 }
 
+#if !defined(__APPLE__)
 static void initialize()
 {
     if (native_malloc == NULL)
         native_malloc = (Malloc)dlsym(RTLD_NEXT, "malloc");
 }
+#endif
 
 static int strToUnsignedLongInt(const char* str, unsigned long int* value)
 {
@@ -99,6 +101,16 @@ static unsigned int readValFromEnvVar(const char* env_var_name, const unsigned i
 
 void activateOverthrower()
 {
+#if defined(__APPLE__)
+    // Mac OS X implementation uses malloc inside printf.
+    // To prevent crashes we have to force printf to do all his allocations before we activated the overthrower.
+    static const int integer_number = 22708089;
+    static const double floating_point_number = 22708089.862725008;
+    char tmp_buf[1024];
+    for (int i = 0; i < 1000; ++i)
+        sprintf(tmp_buf, "%d%f\n", integer_number * i * i, floating_point_number * i * i);
+#endif
+
     fprintf(stderr, "overthrower got activation signal.\n");
     fprintf(stderr, "overthrower will use following parameters for failing allocations:\n");
     strategy = readValFromEnvVar("OVERTHROWER_STRATEGY", STRATEGY_RANDOM, STRATEGY_PULSE);
@@ -121,7 +133,7 @@ void activateOverthrower()
     activated = 1;
 }
 
-static int isTimeTofail()
+static int isTimeToFail()
 {
     switch (strategy) {
         case STRATEGY_RANDOM:
@@ -138,13 +150,36 @@ static int isTimeTofail()
     }
 }
 
+#if defined(__APPLE__)
+void* my_malloc(size_t size)
+#else
 void* malloc(size_t size)
+#endif
 {
+#if !defined(__APPLE__)
     if (native_malloc == NULL)
         initialize();
+#endif
 
-    if ((activated != 0) && (size != 0) && isTimeTofail())
+    if ((activated != 0) && (size != 0) && isTimeToFail())
         return NULL;
 
+#if defined(__APPLE__)
+    return malloc(size);
+#else
     return native_malloc(size);
+#endif
 }
+
+#if defined(__APPLE__)
+typedef struct interpose_s
+{
+    void* substitute;
+    void* original;
+} interpose_t;
+
+__attribute__((used)) static const interpose_t interposing_functions[]
+__attribute__((section("__DATA, __interpose"))) = {
+    { (void*)my_malloc, (void*)malloc }
+};
+#endif
