@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.4)
+cmake_minimum_required(VERSION 3.2)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 project(overthrower)
 add_subdirectory(${PROJECT_NAME})
