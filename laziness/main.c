@@ -3,6 +3,7 @@
 #include <string.h>
 
 void activateOverthrower() __attribute__ ((weak));
+int deactivateOverthrower() __attribute__ ((weak));
 
 int main(int argc, char** argv)
 {
@@ -21,6 +22,14 @@ int main(int argc, char** argv)
     }
 
     printf("%s", tmp);
+
+    if (deactivateOverthrower != NULL) {
+        int diff = deactivateOverthrower();
+        if (diff != 0) {
+            printf("malloc/free count mismatch has been detected. Difference is %d.\n", diff);
+            return 1;
+        }
+    }
 
     return 0;
 }

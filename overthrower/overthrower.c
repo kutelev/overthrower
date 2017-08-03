@@ -11,8 +11,10 @@
 #include <sys/types.h>
 
 typedef void* (*Malloc)(size_t size);
+typedef void (*Free)(void* pointer);
 
 static Malloc native_malloc = NULL;
+static Free native_free = NULL;
 
 #define STRATEGY_RANDOM 0
 #define STRATEGY_STEP 1
@@ -36,6 +38,8 @@ static unsigned int duty_cycle = 1024;
 static unsigned delay = MIN_DELAY;
 static unsigned duration = MIN_DURATION;
 static unsigned int malloc_number = 0;
+static unsigned int malloc_count = 0;
+static unsigned int free_count = 0;
 
 __attribute__ ((constructor))
 static void banner()
@@ -47,8 +51,10 @@ static void banner()
 #if !defined(__APPLE__)
 static void initialize()
 {
-    if (native_malloc == NULL)
+    if (native_malloc == NULL) {
         native_malloc = (Malloc)dlsym(RTLD_NEXT, "malloc");
+        native_free = (Free)dlsym(RTLD_NEXT, "free");
+    }
 }
 #endif
 
@@ -133,6 +139,16 @@ void activateOverthrower()
     activated = 1;
 }
 
+int deactivateOverthrower()
+{
+    activated = 0;
+
+    fprintf(stderr, "overthrower got deactivation signal.\n");
+    fprintf(stderr, "overthrower will not fail allocations anymore.\n");
+
+    return free_count - malloc_count;
+}
+
 static int isTimeToFail()
 {
     switch (strategy) {
@@ -156,6 +172,8 @@ void* my_malloc(size_t size)
 void* malloc(size_t size)
 #endif
 {
+    void* pointer;
+
 #if !defined(__APPLE__)
     if (native_malloc == NULL)
         initialize();
@@ -165,9 +183,30 @@ void* malloc(size_t size)
         return NULL;
 
 #if defined(__APPLE__)
-    return malloc(size);
+    pointer = malloc(size);
 #else
-    return native_malloc(size);
+    pointer = native_malloc(size);
+#endif
+
+    if (activated != 0 && pointer != NULL)
+        __sync_add_and_fetch(&malloc_count, 1);
+
+    return pointer;
+}
+
+#if defined(__APPLE__)
+void* my_free(void* pointer)
+#else
+void free(void* pointer)
+#endif
+{
+    if (activated != 0 && pointer != NULL)
+        __sync_add_and_fetch(&free_count, 1);
+
+#if defined(__APPLE__)
+    free(pointer);
+#else
+    native_free(pointer);
 #endif
 }
 
@@ -180,6 +219,7 @@ typedef struct interpose_s
 
 __attribute__((used)) static const interpose_t interposing_functions[]
 __attribute__((section("__DATA, __interpose"))) = {
-    { (void*)my_malloc, (void*)malloc }
+    { (void*)my_malloc, (void*)malloc },
+    { (void*)my_free, (void*)free }
 };
 #endif
