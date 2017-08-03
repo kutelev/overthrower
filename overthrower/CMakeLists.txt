@@ -1,2 +1,5 @@
 file(GLOB SOURCE_FILES "*.c")
 add_library(${PROJECT_NAME} SHARED ${SOURCE_FILES})
+if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
+    set_target_properties(${PROJECT_NAME} PROPERTIES FRAMEWORK TRUE)
+endif()
