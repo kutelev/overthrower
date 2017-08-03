@@ -15,8 +15,10 @@ else:
     sys.exit(1)
 
 laziness = ['./laziness/laziness']
+stubbornness = ['./stubbornness/stubbornness']
 
 subprocess.check_call(laziness)
+subprocess.check_call(stubbornness)
 
 for key in environment_variables:
     os.putenv(key, environment_variables[key])
@@ -27,3 +29,5 @@ try:
 except subprocess.CalledProcessError as e:
     print('laziness has failed as expected. return code is {}.'.format(e.returncode))
     pass
+
+subprocess.check_call(stubbornness)
