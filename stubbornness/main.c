@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-void activateOverthrower() __attribute__ ((weak));
-int deactivateOverthrower() __attribute__ ((weak));
+void activateOverthrower() __attribute__((weak));
+int deactivateOverthrower() __attribute__((weak));
 
 int main(int argc, char** argv)
 {

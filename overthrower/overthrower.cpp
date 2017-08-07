@@ -1,20 +1,31 @@
+#if !defined(_GNU_SOURCE)
 #define _GNU_SOURCE
+#endif
 
-#include <assert.h>
+#include <cassert>
+#include <cerrno>
+#include <climits>
+#include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
 #include <dlfcn.h>
-#include <errno.h>
-#include <limits.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
+
+#include <limits>
+#include <mutex>
+#include <new>
+#include <unordered_set>
 
 typedef void* (*Malloc)(size_t size);
 typedef void (*Free)(void* pointer);
 
 static Malloc native_malloc = NULL;
 static Free native_free = NULL;
+
+void* nonFailingMalloc(size_t size);
 
 #define STRATEGY_RANDOM 0
 #define STRATEGY_STEP 1
@@ -38,11 +49,58 @@ static unsigned int duty_cycle = 1024;
 static unsigned delay = MIN_DELAY;
 static unsigned duration = MIN_DURATION;
 static unsigned int malloc_number = 0;
-static unsigned int malloc_count = 0;
-static unsigned int free_count = 0;
 
-__attribute__ ((constructor))
-static void banner()
+#if !defined(__APPLE__)
+template<class T>
+class mallocFreeAllocator {
+public:
+    typedef size_t size_type;
+    typedef ptrdiff_t difference_type;
+    typedef T* pointer;
+    typedef const T* const_pointer;
+    typedef T& reference;
+    typedef const T& const_reference;
+    typedef T value_type;
+
+    template<class U>
+    struct rebind {
+        typedef mallocFreeAllocator<U> other;
+    };
+
+    mallocFreeAllocator() throw() {}
+    mallocFreeAllocator(const mallocFreeAllocator&) throw() {}
+
+    template<class U>
+    mallocFreeAllocator(const mallocFreeAllocator<U>&) throw()
+    {
+    }
+
+    ~mallocFreeAllocator() throw() {}
+
+    pointer address(reference x) const { return &x; }
+    const_pointer address(const_reference x) const { return &x; }
+
+    pointer allocate(size_type s, void const* = 0)
+    {
+        if (0 == s)
+            return NULL;
+        pointer temp = (pointer)nonFailingMalloc(s * sizeof(T));
+        if (temp == NULL)
+            throw std::bad_alloc();
+        return temp;
+    }
+
+    void deallocate(pointer p, size_type) { native_free(p); }
+    size_type max_size() const throw() { return std::numeric_limits<size_t>::max() / sizeof(T); }
+    void construct(pointer p, const T& val) { new ((void*)p) T(val); }
+    void destroy(pointer p) { p->~T(); }
+};
+
+static std::mutex mutex;
+static std::unordered_set<void*, std::hash<void*>, std::equal_to<void*>, mallocFreeAllocator<void*>> allocated;
+#endif
+
+__attribute__((constructor)) static void banner()
 {
     fprintf(stderr, "overthrower is waiting for the activation signal ...\n");
     fprintf(stderr, "Invoke activateOverthrower and overthrower will start his job.\n");
@@ -105,7 +163,7 @@ static unsigned int readValFromEnvVar(const char* env_var_name, const unsigned i
     return (unsigned int)value;
 }
 
-void activateOverthrower()
+extern "C" void activateOverthrower()
 {
 #if defined(__APPLE__)
     // Mac OS X implementation uses malloc inside printf.
@@ -139,14 +197,18 @@ void activateOverthrower()
     activated = 1;
 }
 
-int deactivateOverthrower()
+extern "C" int deactivateOverthrower()
 {
     activated = 0;
 
     fprintf(stderr, "overthrower got deactivation signal.\n");
     fprintf(stderr, "overthrower will not fail allocations anymore.\n");
 
-    return free_count - malloc_count;
+#if defined(__APPLE__)
+    return 0;
+#else
+    return allocated.size();
+#endif
 }
 
 static int isTimeToFail()
@@ -166,6 +228,15 @@ static int isTimeToFail()
     }
 }
 
+void* nonFailingMalloc(size_t size)
+{
+#if defined(__APPLE__)
+    return malloc(size);
+#else
+    return native_malloc ? native_malloc(size) : malloc(size);
+#endif
+}
+
 #if defined(__APPLE__)
 void* my_malloc(size_t size)
 #else
@@ -182,26 +253,30 @@ void* malloc(size_t size)
     if ((activated != 0) && (size != 0) && isTimeToFail())
         return NULL;
 
-#if defined(__APPLE__)
-    pointer = malloc(size);
-#else
-    pointer = native_malloc(size);
-#endif
+    pointer = nonFailingMalloc(size);
 
-    if (activated != 0 && pointer != NULL)
-        __sync_add_and_fetch(&malloc_count, 1);
+#if !defined(__APPLE__)
+    if (activated != 0 && pointer != NULL) {
+        std::lock_guard<std::mutex> lock(mutex);
+        allocated.insert(pointer);
+    }
+#endif
 
     return pointer;
 }
 
 #if defined(__APPLE__)
-void* my_free(void* pointer)
+void my_free(void* pointer)
 #else
 void free(void* pointer)
 #endif
 {
-    if (activated != 0 && pointer != NULL)
-        __sync_add_and_fetch(&free_count, 1);
+#if !defined(__APPLE__)
+    if (activated != 0 && pointer != NULL) {
+        std::lock_guard<std::mutex> lock(mutex);
+        allocated.erase(pointer);
+    }
+#endif
 
 #if defined(__APPLE__)
     free(pointer);
@@ -211,15 +286,11 @@ void free(void* pointer)
 }
 
 #if defined(__APPLE__)
-typedef struct interpose_s
-{
+typedef struct interpose_s {
     void* substitute;
     void* original;
 } interpose_t;
 
 __attribute__((used)) static const interpose_t interposing_functions[]
-__attribute__((section("__DATA, __interpose"))) = {
-    { (void*)my_malloc, (void*)malloc },
-    { (void*)my_free, (void*)free }
-};
+    __attribute__((section("__DATA, __interpose"))) = { { (void*)my_malloc, (void*)malloc }, { (void*)my_free, (void*)free } };
 #endif
