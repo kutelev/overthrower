@@ -212,9 +212,9 @@ extern "C" int deactivateOverthrower()
 #endif
 }
 
-extern "C" void pauseOverthrower()
+extern "C" void pauseOverthrower(unsigned int duration)
 {
-    paused = 1;
+    paused = duration == 0 ? UINT_MAX : duration;
 }
 
 extern "C" void resumeOverthrower()
@@ -264,6 +264,9 @@ void* malloc(size_t size)
     if ((activated != 0) && (paused == 0) && (size != 0) && isTimeToFail())
         return NULL;
 
+    if (paused)
+        --paused;
+    
     pointer = nonFailingMalloc(size);
 
 #if !defined(__APPLE__)
