@@ -43,6 +43,7 @@ void* nonFailingMalloc(size_t size);
 static const char* strategy_names[3] = { "random", "step", "pulse" };
 
 static unsigned int activated = 0;
+static unsigned int paused = 0;
 static unsigned int strategy = STRATEGY_RANDOM;
 static unsigned int seed = 0;
 static unsigned int duty_cycle = 1024;
@@ -211,6 +212,16 @@ extern "C" int deactivateOverthrower()
 #endif
 }
 
+extern "C" void pauseOverthrower()
+{
+    paused = 1;
+}
+
+extern "C" void resumeOverthrower()
+{
+    paused = 0;
+}
+
 static int isTimeToFail()
 {
     switch (strategy) {
@@ -250,7 +261,7 @@ void* malloc(size_t size)
         initialize();
 #endif
 
-    if ((activated != 0) && (size != 0) && isTimeToFail())
+    if ((activated != 0) && (paused == 0) && (size != 0) && isTimeToFail())
         return NULL;
 
     pointer = nonFailingMalloc(size);
