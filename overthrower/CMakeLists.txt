@@ -1,3 +1,4 @@
+project(overthrower)
 set(CMAKE_CXX_STANDARD 11)
 file(GLOB SOURCE_FILES "*.cpp")
 add_library(${PROJECT_NAME} SHARED ${SOURCE_FILES})
