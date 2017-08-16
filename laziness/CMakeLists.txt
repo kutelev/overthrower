@@ -1,5 +1,6 @@
+project(laziness)
 file(GLOB SOURCE_FILES *.c)
-add_executable(laziness ${SOURCE_FILES})
+add_executable(${PROJECT_NAME} ${SOURCE_FILES})
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-    set_target_properties(laziness PROPERTIES LINK_FLAGS "-Wl,-U,_activateOverthrower -Wl,-U,_deactivateOverthrower")
+    set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-Wl,-U,_activateOverthrower -Wl,-U,_deactivateOverthrower")
 endif()

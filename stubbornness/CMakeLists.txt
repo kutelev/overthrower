@@ -1,5 +1,6 @@
+project(stubbornness)
 file(GLOB SOURCE_FILES *.c)
-add_executable(stubbornness ${SOURCE_FILES})
+add_executable(${PROJECT_NAME} ${SOURCE_FILES})
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-    set_target_properties(stubbornness PROPERTIES LINK_FLAGS "-Wl,-U,_activateOverthrower -Wl,-U,_deactivateOverthrower")
+    set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-Wl,-U,_activateOverthrower -Wl,-U,_deactivateOverthrower")
 endif()

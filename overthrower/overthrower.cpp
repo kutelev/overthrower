@@ -17,7 +17,7 @@
 #include <limits>
 #include <mutex>
 #include <new>
-#include <unordered_set>
+#include <unordered_map>
 
 typedef void* (*Malloc)(size_t size);
 typedef void (*Free)(void* pointer);
@@ -52,7 +52,7 @@ static unsigned duration = MIN_DURATION;
 static unsigned int malloc_number = 0;
 
 #if !defined(__APPLE__)
-template<class T>
+template <class T>
 class mallocFreeAllocator {
 public:
     typedef size_t size_type;
@@ -63,7 +63,7 @@ public:
     typedef const T& const_reference;
     typedef T value_type;
 
-    template<class U>
+    template <class U>
     struct rebind {
         typedef mallocFreeAllocator<U> other;
     };
@@ -71,7 +71,7 @@ public:
     mallocFreeAllocator() throw() {}
     mallocFreeAllocator(const mallocFreeAllocator&) throw() {}
 
-    template<class U>
+    template <class U>
     mallocFreeAllocator(const mallocFreeAllocator<U>&) throw()
     {
     }
@@ -98,7 +98,8 @@ public:
 };
 
 static std::mutex mutex;
-static std::unordered_set<void*, std::hash<void*>, std::equal_to<void*>, mallocFreeAllocator<void*>> allocated;
+static std::unordered_map<void*, unsigned int, std::hash<void*>, std::equal_to<void*>, mallocFreeAllocator<void*>> allocated;
+static unsigned int malloc_seq_num = 0;
 #endif
 
 __attribute__((constructor)) static void banner()
@@ -166,15 +167,16 @@ static unsigned int readValFromEnvVar(const char* env_var_name, const unsigned i
 
 extern "C" void activateOverthrower()
 {
-#if defined(__APPLE__)
+    #if defined(__APPLE__)
     // Mac OS X implementation uses malloc inside printf.
-    // To prevent crashes we have to force printf to do all his allocations before we activated the overthrower.
+    // To prevent crashes we have to force printf to do all his allocations before
+    // we activated the overthrower.
     static const int integer_number = 22708089;
     static const double floating_point_number = 22708089.862725008;
     char tmp_buf[1024];
     for (int i = 0; i < 1000; ++i)
         sprintf(tmp_buf, "%d%f\n", integer_number * i * i, floating_point_number * i * i);
-#endif
+    #endif
 
     fprintf(stderr, "overthrower got activation signal.\n");
     fprintf(stderr, "overthrower will use following parameters for failing allocations:\n");
@@ -208,6 +210,11 @@ extern "C" int deactivateOverthrower()
 #if defined(__APPLE__)
     return 0;
 #else
+    if (!allocated.empty()) {
+        fprintf(stderr, "overthrower has detected not freed memory blocks with following addresses:\n");
+        for (const auto& v : allocated)
+            fprintf(stderr, "%10p - %4d\n", v.first, v.second);
+    }
     return allocated.size();
 #endif
 }
@@ -266,13 +273,14 @@ void* malloc(size_t size)
 
     if (paused)
         --paused;
-    
+
     pointer = nonFailingMalloc(size);
 
 #if !defined(__APPLE__)
     if (activated != 0 && pointer != NULL) {
         std::lock_guard<std::mutex> lock(mutex);
-        allocated.insert(pointer);
+        malloc_seq_num++;
+        allocated.insert({ pointer, malloc_seq_num });
     }
 #endif
 
