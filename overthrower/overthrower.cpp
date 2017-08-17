@@ -22,10 +22,13 @@
 typedef void* (*Malloc)(size_t size);
 typedef void (*Free)(void* pointer);
 
+#if !defined(__APPLE__)
 static Malloc native_malloc = NULL;
 static Free native_free = NULL;
+#endif
 
 void* nonFailingMalloc(size_t size);
+void nonFailingFree(void* pointer);
 
 #define STRATEGY_RANDOM 0
 #define STRATEGY_STEP 1
@@ -51,7 +54,6 @@ static unsigned delay = MIN_DELAY;
 static unsigned duration = MIN_DURATION;
 static unsigned int malloc_number = 0;
 
-#if !defined(__APPLE__)
 template <class T>
 class mallocFreeAllocator {
 public:
@@ -91,16 +93,15 @@ public:
         return temp;
     }
 
-    void deallocate(pointer p, size_type) { native_free(p); }
+    void deallocate(pointer p, size_type) { nonFailingFree(p); }
     size_type max_size() const throw() { return std::numeric_limits<size_t>::max() / sizeof(T); }
     void construct(pointer p, const T& val) { new ((void*)p) T(val); }
     void destroy(pointer p) { p->~T(); }
 };
 
 static std::mutex mutex;
-static std::unordered_map<void*, unsigned int, std::hash<void*>, std::equal_to<void*>, mallocFreeAllocator<void*>> allocated;
+static std::unordered_map<void*, unsigned int, std::hash<void*>, std::equal_to<void*>, mallocFreeAllocator<std::pair<void* const, unsigned int>>> allocated;
 static unsigned int malloc_seq_num = 0;
-#endif
 
 __attribute__((constructor)) static void banner()
 {
@@ -207,16 +208,12 @@ extern "C" int deactivateOverthrower()
     fprintf(stderr, "overthrower got deactivation signal.\n");
     fprintf(stderr, "overthrower will not fail allocations anymore.\n");
 
-#if defined(__APPLE__)
-    return 0;
-#else
     if (!allocated.empty()) {
         fprintf(stderr, "overthrower has detected not freed memory blocks with following addresses:\n");
         for (const auto& v : allocated)
             fprintf(stderr, "%10p - %4d\n", v.first, v.second);
     }
     return allocated.size();
-#endif
 }
 
 extern "C" void pauseOverthrower(unsigned int duration)
@@ -255,6 +252,15 @@ void* nonFailingMalloc(size_t size)
 #endif
 }
 
+void nonFailingFree(void* pointer)
+{
+#if defined(__APPLE__)
+    return free(pointer);
+#else
+    return native_free(pointer);
+#endif
+}
+
 #if defined(__APPLE__)
 void* my_malloc(size_t size)
 #else
@@ -276,13 +282,11 @@ void* malloc(size_t size)
 
     pointer = nonFailingMalloc(size);
 
-#if !defined(__APPLE__)
     if (activated != 0 && pointer != NULL) {
         std::lock_guard<std::mutex> lock(mutex);
         malloc_seq_num++;
         allocated.insert({ pointer, malloc_seq_num });
     }
-#endif
 
     return pointer;
 }
@@ -293,12 +297,10 @@ void my_free(void* pointer)
 void free(void* pointer)
 #endif
 {
-#if !defined(__APPLE__)
     if (activated != 0 && pointer != NULL) {
         std::lock_guard<std::mutex> lock(mutex);
         allocated.erase(pointer);
     }
-#endif
 
 #if defined(__APPLE__)
     free(pointer);
