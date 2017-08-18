@@ -177,6 +177,7 @@ extern "C" void activateOverthrower()
     char tmp_buf[1024];
     for (int i = 0; i < 1000; ++i)
         sprintf(tmp_buf, "%d%f\n", integer_number * i * i, floating_point_number * i * i);
+    printf("overthrower have to print useless string to force printf to do all preallocations: %s", tmp_buf);
     #endif
 
     fprintf(stderr, "overthrower got activation signal.\n");
