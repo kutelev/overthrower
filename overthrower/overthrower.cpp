@@ -4,12 +4,12 @@
 
 #include <cassert>
 #include <cerrno>
+#include <cinttypes>
 #include <climits>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <cinttypes>
 
 #include <dlfcn.h>
 #include <sys/syscall.h>
@@ -55,7 +55,7 @@ static unsigned delay = MIN_DELAY;
 static unsigned duration = MIN_DURATION;
 static unsigned int malloc_number = 0;
 
-template <class T>
+template<class T>
 class mallocFreeAllocator {
 public:
     typedef size_t size_type;
@@ -66,7 +66,7 @@ public:
     typedef const T& const_reference;
     typedef T value_type;
 
-    template <class U>
+    template<class U>
     struct rebind {
         typedef mallocFreeAllocator<U> other;
     };
@@ -74,7 +74,7 @@ public:
     mallocFreeAllocator() throw() {}
     mallocFreeAllocator(const mallocFreeAllocator&) throw() {}
 
-    template <class U>
+    template<class U>
     mallocFreeAllocator(const mallocFreeAllocator<U>&) throw()
     {
     }
@@ -169,7 +169,7 @@ static unsigned int readValFromEnvVar(const char* env_var_name, const unsigned i
 
 extern "C" void activateOverthrower()
 {
-    #if defined(__APPLE__)
+#if defined(__APPLE__)
     // Mac OS X implementation uses malloc inside printf.
     // To prevent crashes we have to force printf to do all his allocations before
     // we activated the overthrower.
@@ -179,7 +179,7 @@ extern "C" void activateOverthrower()
     for (int i = 0; i < 1000; ++i)
         sprintf(tmp_buf, "%d%f\n", integer_number * i * i, floating_point_number * i * i);
     printf("overthrower have to print useless string to force printf to do all preallocations: %s", tmp_buf);
-    #endif
+#endif
 
     fprintf(stderr, "overthrower got activation signal.\n");
     fprintf(stderr, "overthrower will use following parameters for failing allocations:\n");
