@@ -10,7 +10,7 @@ if platform.system() == 'Linux':
     environment_variables['LD_PRELOAD'] = 'liboverthrower.so'
 elif platform.system() == 'Darwin':
     environment_variables['DYLD_FORCE_FLAT_NAMESPACE'] = '1'
-    environment_variables['DYLD_INSERT_LIBRARIES'] = './overthrower/overthrower.framework/overthrower'
+    environment_variables['DYLD_INSERT_LIBRARIES'] = './overthrower/overthrower.framework/Versions/Current/overthrower'
 else:
     sys.exit(1)
 

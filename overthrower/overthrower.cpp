@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cinttypes>
 
 #include <dlfcn.h>
 #include <sys/syscall.h>
@@ -212,7 +213,7 @@ extern "C" int deactivateOverthrower()
     if (!allocated.empty()) {
         fprintf(stderr, "overthrower has detected not freed memory blocks with following addresses:\n");
         for (const auto& v : allocated)
-            fprintf(stderr, "%10p - %4d\n", v.first, v.second);
+            fprintf(stderr, "0x%016" PRIxPTR " - %6d\n", (uintptr_t)v.first, v.second);
     }
     return allocated.size();
 }
