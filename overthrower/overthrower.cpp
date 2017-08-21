@@ -15,6 +15,11 @@
 #include <sys/syscall.h>
 #include <sys/types.h>
 
+#if defined(__APPLE__)
+#include <execinfo.h>
+#include <pthread.h>
+#endif
+
 #include <limits>
 #include <mutex>
 #include <new>
@@ -54,6 +59,31 @@ static unsigned int duty_cycle = 1024;
 static unsigned delay = MIN_DELAY;
 static unsigned duration = MIN_DURATION;
 static unsigned int malloc_number = 0;
+static unsigned int malloc_seq_num = 0;
+
+#if defined(__APPLE__)
+template<typename T>
+class ThreadLocal final {
+public:
+    ThreadLocal() { pthread_key_create(&key, NULL); }
+    ~ThreadLocal() { pthread_key_delete(key); }
+
+    void operator=(const T* value) { set(value); }
+
+    const T* operator*() const { return get(); }
+    T* operator->() const { return get(); }
+    operator bool() const { return get(); }
+    operator T*() const { return get(); }
+
+private:
+    void set(const T* value) { pthread_setspecific(key, value); }
+    T* get() const { return reinterpret_cast<T*>(pthread_getspecific(key)); }
+
+    pthread_key_t key;
+};
+
+static ThreadLocal<void> is_tracing;
+#endif
 
 template<class T>
 class mallocFreeAllocator {
@@ -102,7 +132,6 @@ public:
 
 static std::mutex mutex;
 static std::unordered_map<void*, unsigned int, std::hash<void*>, std::equal_to<void*>, mallocFreeAllocator<std::pair<void* const, unsigned int>>> allocated;
-static unsigned int malloc_seq_num = 0;
 
 __attribute__((constructor)) static void banner()
 {
@@ -264,11 +293,40 @@ void nonFailingFree(void* pointer)
 }
 
 #if defined(__APPLE__)
+static bool isInWhiteList()
+{
+    void* callstack[4];
+    const int count = backtrace(callstack, 4);
+    char** symbols = backtrace_symbols(callstack, count);
+
+    if (!symbols)
+        return true;
+
+    bool is_in_white_list = false;
+
+    if (count >= 4 && strstr(symbols[3], "__cxa_allocate_exception"))
+        is_in_white_list = true;
+
+#if 0
+    for (int i = 1; i < count; ++i )
+        printf("%s\n", symbols[i]);
+#endif
+
+    free(symbols);
+
+    return is_in_white_list;
+}
+#endif
+
+#if defined(__APPLE__)
 void* my_malloc(size_t size)
 #else
 void* malloc(size_t size)
 #endif
 {
+#if !defined(__APPLE__)
+    static const bool is_in_white_list = false;
+#endif
     void* pointer;
 
 #if !defined(__APPLE__)
@@ -276,19 +334,32 @@ void* malloc(size_t size)
         initialize();
 #endif
 
-    if ((activated != 0) && (paused == 0) && (size != 0) && isTimeToFail())
-        return NULL;
+#if defined(__APPLE__)
+    bool is_in_white_list = is_tracing;
 
-    if (paused)
-        --paused;
+    if (!is_tracing) {
+        is_tracing = reinterpret_cast<void*>(-1);
+        const unsigned int old_paused = paused;
+        pauseOverthrower(0);
+        is_in_white_list = isInWhiteList();
+        paused = old_paused;
+        is_tracing = nullptr;
+    }
+#endif
+
+    if (!is_in_white_list && (activated != 0) && (paused == 0) && (size != 0) && isTimeToFail())
+        return NULL;
 
     pointer = nonFailingMalloc(size);
 
-    if (activated != 0 && pointer != NULL) {
+    if (activated != 0 && pointer != NULL && paused == 0) {
         std::lock_guard<std::mutex> lock(mutex);
         malloc_seq_num++;
         allocated.insert({ pointer, malloc_seq_num });
     }
+
+    if (paused)
+        --paused;
 
     return pointer;
 }
