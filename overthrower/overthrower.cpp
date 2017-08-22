@@ -39,6 +39,7 @@ void nonFailingFree(void* pointer);
 #define STRATEGY_RANDOM 0
 #define STRATEGY_STEP 1
 #define STRATEGY_PULSE 2
+#define STRATEGY_NONE 3
 
 #define MIN_DUTY_CYCLE 1
 #define MAX_DUTY_CYCLE 4096
@@ -49,7 +50,7 @@ void nonFailingFree(void* pointer);
 #define MIN_DURATION 1
 #define MAX_DURATION 100
 
-static const char* strategy_names[3] = { "random", "step", "pulse" };
+static const char* strategy_names[4] = { "random", "step", "pulse", "none" };
 
 static unsigned int activated = 0;
 static unsigned int paused = 0;
@@ -212,7 +213,7 @@ extern "C" void activateOverthrower()
 
     fprintf(stderr, "overthrower got activation signal.\n");
     fprintf(stderr, "overthrower will use following parameters for failing allocations:\n");
-    strategy = readValFromEnvVar("OVERTHROWER_STRATEGY", STRATEGY_RANDOM, STRATEGY_PULSE);
+    strategy = readValFromEnvVar("OVERTHROWER_STRATEGY", STRATEGY_RANDOM, STRATEGY_NONE);
     fprintf(stderr, "Strategy = %s\n", strategy_names[strategy]);
     if (strategy == STRATEGY_RANDOM) {
         seed = readValFromEnvVar("OVERTHROWER_SEED", 0, UINT_MAX);
@@ -221,7 +222,7 @@ extern "C" void activateOverthrower()
         fprintf(stderr, "Duty cycle = %u\n", duty_cycle);
         fprintf(stderr, "Seed = %u\n", seed);
     }
-    else {
+    else if (strategy != STRATEGY_NONE) {
         delay = readValFromEnvVar("OVERTHROWER_DELAY", MIN_DELAY, MAX_DELAY);
         fprintf(stderr, "Delay = %u\n", delay);
         if (strategy == STRATEGY_PULSE) {
@@ -268,6 +269,8 @@ static int isTimeToFail()
             unsigned int number = __sync_add_and_fetch(&malloc_number, 1) + 1;
             return (number > delay && number < delay + duration) ? 1 : 0;
         }
+        case STRATEGY_NONE:
+            return 0;
         default:
             assert(0);
             return 0;
