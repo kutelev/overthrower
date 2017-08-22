@@ -347,8 +347,10 @@ void* malloc(size_t size)
     }
 #endif
 
-    if (!is_in_white_list && (activated != 0) && (paused == 0) && (size != 0) && isTimeToFail())
+    if (!is_in_white_list && (activated != 0) && (paused == 0) && (size != 0) && isTimeToFail()) {
+        errno = ENOMEM;
         return NULL;
+    }
 
     pointer = nonFailingMalloc(size);
 
@@ -370,6 +372,7 @@ void my_free(void* pointer)
 void free(void* pointer)
 #endif
 {
+    int old_errno = errno;
     if (activated != 0 && pointer != NULL) {
         std::lock_guard<std::mutex> lock(mutex);
         allocated.erase(pointer);
@@ -380,6 +383,7 @@ void free(void* pointer)
 #else
     native_free(pointer);
 #endif
+    errno = old_errno;
 }
 
 #if defined(__APPLE__)
