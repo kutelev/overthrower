@@ -134,10 +134,22 @@ public:
 static std::mutex mutex;
 static std::unordered_map<void*, unsigned int, std::hash<void*>, std::equal_to<void*>, mallocFreeAllocator<std::pair<void* const, unsigned int>>> allocated;
 
+extern "C" int deactivateOverthrower();
+
 __attribute__((constructor)) static void banner()
 {
     fprintf(stderr, "overthrower is waiting for the activation signal ...\n");
     fprintf(stderr, "Invoke activateOverthrower and overthrower will start his job.\n");
+}
+
+__attribute__((destructor)) static void shutdown()
+{
+    if (activated == 0)
+        return;
+
+    fprintf(stderr, "overthrower has not been deactivated explicitly, doing it anyway.\n");
+
+    deactivateOverthrower();
 }
 
 #if !defined(__APPLE__)
