@@ -12,18 +12,19 @@
 #include <cstring>
 
 #include <dlfcn.h>
-#include <sys/syscall.h>
-#include <sys/types.h>
-
-#if defined(__APPLE__)
 #include <execinfo.h>
 #include <pthread.h>
-#endif
 
 #include <limits>
 #include <mutex>
 #include <new>
 #include <unordered_map>
+
+#if defined(__APPLE__)
+#define MAX_STACK_DEPTH 4
+#else
+#define MAX_STACK_DEPTH 3
+#endif
 
 typedef void* (*Malloc)(size_t size);
 typedef void (*Free)(void* pointer);
@@ -62,7 +63,6 @@ static unsigned duration = MIN_DURATION;
 static unsigned int malloc_number = 0;
 static unsigned int malloc_seq_num = 0;
 
-#if defined(__APPLE__)
 template<typename T>
 class ThreadLocal final {
 public:
@@ -84,7 +84,6 @@ private:
 };
 
 static ThreadLocal<void> is_tracing;
-#endif
 
 template<class T>
 class mallocFreeAllocator {
@@ -307,20 +306,27 @@ void nonFailingFree(void* pointer)
 #endif
 }
 
-#if defined(__APPLE__)
-static bool isInWhiteList()
+static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
 {
-    void* callstack[4];
-    const int count = backtrace(callstack, 4);
+    void* callstack[MAX_STACK_DEPTH];
+    const int count = backtrace(callstack, MAX_STACK_DEPTH);
     char** symbols = backtrace_symbols(callstack, count);
 
-    if (!symbols)
-        return true;
-
-    bool is_in_white_list = false;
-
-    if (count >= 4 && strstr(symbols[3], "__cxa_allocate_exception"))
+    if (!symbols) {
         is_in_white_list = true;
+        is_in_ignore_list = true;
+    }
+
+    is_in_white_list = false;
+    is_in_ignore_list = false;
+
+#if defined(__APPLE__)
+    if (count >= MAX_STACK_DEPTH && strstr(symbols[3], "__cxa_allocate_exception"))
+        is_in_white_list = true;
+#else
+    if (count >= MAX_STACK_DEPTH && strstr(symbols[2], "ld-linux"))
+        is_in_ignore_list = true;
+#endif
 
 #if 0
     for (int i = 1; i < count; ++i )
@@ -328,10 +334,7 @@ static bool isInWhiteList()
 #endif
 
     free(symbols);
-
-    return is_in_white_list;
 }
-#endif
 
 #if defined(__APPLE__)
 void* my_malloc(size_t size)
@@ -339,9 +342,6 @@ void* my_malloc(size_t size)
 void* malloc(size_t size)
 #endif
 {
-#if !defined(__APPLE__)
-    static const bool is_in_white_list = false;
-#endif
     void* pointer;
 
 #if !defined(__APPLE__)
@@ -349,18 +349,17 @@ void* malloc(size_t size)
         initialize();
 #endif
 
-#if defined(__APPLE__)
     bool is_in_white_list = is_tracing;
+    bool is_in_ignore_list = false;
 
     if (!is_tracing) {
         is_tracing = reinterpret_cast<void*>(-1);
         const unsigned int old_paused = paused;
         pauseOverthrower(0);
-        is_in_white_list = isInWhiteList();
+        searchKnowledgeBase(is_in_white_list, is_in_ignore_list);
         paused = old_paused;
         is_tracing = nullptr;
     }
-#endif
 
     if (!is_in_white_list && (activated != 0) && (paused == 0) && (size != 0) && isTimeToFail()) {
         errno = ENOMEM;
@@ -369,7 +368,7 @@ void* malloc(size_t size)
 
     pointer = nonFailingMalloc(size);
 
-    if (activated != 0 && pointer != NULL && paused == 0) {
+    if (!is_in_ignore_list && activated != 0 && pointer != NULL && paused == 0) {
         std::lock_guard<std::mutex> lock(mutex);
         malloc_seq_num++;
         allocated.insert({ pointer, malloc_seq_num });
