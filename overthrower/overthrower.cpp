@@ -321,10 +321,12 @@ static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
     is_in_ignore_list = false;
 
 #if defined(__APPLE__)
-    if (count >= MAX_STACK_DEPTH && strstr(symbols[3], "__cxa_allocate_exception"))
+    if (count >= 4 && strstr(symbols[3], "__cxa_allocate_exception"))
         is_in_white_list = true;
 #else
-    if (count >= MAX_STACK_DEPTH && strstr(symbols[2], "ld-linux"))
+    if (count >= 2 && strstr(symbols[1], "__cxa_allocate_exception"))
+        is_in_white_list = true;
+    if (count >= 3 && strstr(symbols[2], "ld-linux"))
         is_in_ignore_list = true;
 #endif
 
