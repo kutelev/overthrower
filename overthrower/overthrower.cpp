@@ -23,7 +23,7 @@
 #if defined(__APPLE__)
 #define MAX_STACK_DEPTH 4
 #else
-#define MAX_STACK_DEPTH 3
+#define MAX_STACK_DEPTH 4
 #endif
 
 typedef void* (*Malloc)(size_t size);
@@ -328,11 +328,11 @@ static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
         is_in_ignore_list = true;
     }
 #else
-    if (count >= 2 && strstr(symbols[1], "__cxa_allocate_exception")) {
+    if (count >= 2 && strstr(symbols[1], "__cxa_allocate_exception"))
         is_in_white_list = true;
-        is_in_ignore_list = true;
-    }
     if (count >= 3 && strstr(symbols[2], "ld-linux"))
+        is_in_ignore_list = true;
+    if (count >= 4 && strstr(symbols[3], "dlerror"))
         is_in_ignore_list = true;
 #endif
 
