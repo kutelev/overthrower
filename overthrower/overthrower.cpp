@@ -58,8 +58,8 @@ static unsigned int paused = 0;
 static unsigned int strategy = STRATEGY_RANDOM;
 static unsigned int seed = 0;
 static unsigned int duty_cycle = 1024;
-static unsigned delay = MIN_DELAY;
-static unsigned duration = MIN_DURATION;
+static unsigned int delay = MIN_DELAY;
+static unsigned int duration = MIN_DURATION;
 static unsigned int malloc_number = 0;
 static unsigned int malloc_seq_num = 0;
 
@@ -133,7 +133,7 @@ public:
 static std::mutex mutex;
 static std::unordered_map<void*, unsigned int, std::hash<void*>, std::equal_to<void*>, mallocFreeAllocator<std::pair<void* const, unsigned int>>> allocated;
 
-extern "C" int deactivateOverthrower();
+extern "C" unsigned int deactivateOverthrower();
 
 __attribute__((constructor)) static void banner()
 {
@@ -189,13 +189,13 @@ static unsigned int generateRandomValue(const unsigned int min_val, const unsign
     return value;
 }
 
-static unsigned int readValFromEnvVar(const char* env_var_name, const unsigned int min_val, const unsigned int max_val)
+static unsigned int readValFromEnvVar(const char* env_var_name, unsigned int min_val, unsigned int max_val, unsigned int max_random_val = 0)
 {
     const char* env_var_val = getenv(env_var_name);
     unsigned long int value;
 
     if (env_var_val == NULL) {
-        const unsigned int random_value = generateRandomValue(min_val, max_val);
+        const unsigned int random_value = generateRandomValue(min_val, max_random_val ? max_random_val : max_val);
         fprintf(stderr, "%s environment variable not set. Using a random value (%u).\n", env_var_name, random_value);
         return random_value;
     }
@@ -224,7 +224,7 @@ extern "C" void activateOverthrower()
 
     fprintf(stderr, "overthrower got activation signal.\n");
     fprintf(stderr, "overthrower will use following parameters for failing allocations:\n");
-    strategy = readValFromEnvVar("OVERTHROWER_STRATEGY", STRATEGY_RANDOM, STRATEGY_NONE);
+    strategy = readValFromEnvVar("OVERTHROWER_STRATEGY", STRATEGY_RANDOM, STRATEGY_NONE, STRATEGY_PULSE);
     fprintf(stderr, "Strategy = %s\n", strategy_names[strategy]);
     if (strategy == STRATEGY_RANDOM) {
         seed = readValFromEnvVar("OVERTHROWER_SEED", 0, UINT_MAX);
@@ -244,7 +244,7 @@ extern "C" void activateOverthrower()
     activated = 1;
 }
 
-extern "C" int deactivateOverthrower()
+extern "C" unsigned int deactivateOverthrower()
 {
     activated = 0;
 
@@ -256,7 +256,10 @@ extern "C" int deactivateOverthrower()
         for (const auto& v : allocated)
             fprintf(stderr, "0x%016" PRIxPTR " - %6d\n", (uintptr_t)v.first, v.second);
     }
-    return allocated.size();
+
+    const unsigned int blocks_leaked = allocated.size();
+    allocated.clear();
+    return blocks_leaked;
 }
 
 extern "C" void pauseOverthrower(unsigned int duration)
