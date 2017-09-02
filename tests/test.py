@@ -16,9 +16,16 @@ else:
 
 laziness = ['./laziness/laziness']
 stubbornness = ['./stubbornness/stubbornness']
+overthrower_tests = ['./overthrower/overthrower_tests']
 
 subprocess.check_call(laziness)
 subprocess.check_call(stubbornness)
+
+try:
+    subprocess.check_call(overthrower_tests)
+    sys.exit(1)
+except subprocess.CalledProcessError as e:
+    pass
 
 for key in environment_variables:
     os.putenv(key, environment_variables[key])
@@ -31,3 +38,4 @@ except subprocess.CalledProcessError as e:
     pass
 
 subprocess.check_call(stubbornness)
+subprocess.check_call(overthrower_tests)

@@ -1,6 +1,9 @@
 language: cpp
 
 script:
+- cd overthrower
+- git clone --branch release-1.8.0 --depth 1 https://github.com/google/googletest.git
+- cd ..
 - cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
 - cmake --build . --config Release
 - python ./tests/test.py
