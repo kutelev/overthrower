@@ -23,29 +23,18 @@ GTEST_API_ int main(int argc, char** argv)
     return RUN_ALL_TESTS();
 }
 
-class OverthrowerConfigurator {
-public:
-    OverthrowerConfigurator(unsigned int strategy = 0,
-                            unsigned int seed = 0,
-                            unsigned int duty_cycle = 1024,
-                            unsigned int delay = 0,
-                            unsigned int duration = 1);
-    ~OverthrowerConfigurator();
+class AbstractOverthrowerConfigurator {
+protected:
+    AbstractOverthrowerConfigurator() = default;
 
-    void setEnv(const char* name, unsigned int value);
-    void unsetEnv(const char* name);
+public:
+    virtual ~AbstractOverthrowerConfigurator();
+
+    void setEnv(const char* name, unsigned int value) { ASSERT_EQ(setenv(name, std::to_string(value).c_str(), 1), 0); }
+    void unsetEnv(const char* name) { ASSERT_EQ(unsetenv(name), 0); }
 };
 
-OverthrowerConfigurator::OverthrowerConfigurator(unsigned int strategy, unsigned int seed, unsigned int duty_cycle, unsigned int delay, unsigned int duration)
-{
-    setEnv("OVERTHROWER_STRATEGY", strategy);
-    setEnv("OVERTHROWER_SEED", seed);
-    setEnv("OVERTHROWER_DUTY_CYCLE", duty_cycle);
-    setEnv("OVERTHROWER_DELAY", delay);
-    setEnv("OVERTHROWER_DURATION", duration);
-}
-
-OverthrowerConfigurator::~OverthrowerConfigurator()
+AbstractOverthrowerConfigurator::~AbstractOverthrowerConfigurator()
 {
     unsetEnv("OVERTHROWER_STRATEGY");
     unsetEnv("OVERTHROWER_SEED");
@@ -54,15 +43,46 @@ OverthrowerConfigurator::~OverthrowerConfigurator()
     unsetEnv("OVERTHROWER_DURATION");
 }
 
-void OverthrowerConfigurator::setEnv(const char* name, unsigned int value)
-{
-    ASSERT_EQ(setenv(name, std::to_string(value).c_str(), 1), 0);
-}
+class OverthrowerConfiguratorRandom : public AbstractOverthrowerConfigurator {
+public:
+    OverthrowerConfiguratorRandom()
+        : OverthrowerConfiguratorRandom(1024)
+    {
+    }
 
-void OverthrowerConfigurator::unsetEnv(const char* name)
-{
-    ASSERT_EQ(unsetenv(name), 0);
-}
+    OverthrowerConfiguratorRandom(unsigned int duty_cycle)
+    {
+        setEnv("OVERTHROWER_STRATEGY", 0);
+        setEnv("OVERTHROWER_SEED", 0);
+        setEnv("OVERTHROWER_DUTY_CYCLE", duty_cycle);
+    }
+};
+
+class OverthrowerConfiguratorStep : public AbstractOverthrowerConfigurator {
+public:
+    OverthrowerConfiguratorStep() = delete;
+    OverthrowerConfiguratorStep(unsigned int delay)
+    {
+        setEnv("OVERTHROWER_STRATEGY", 1);
+        setEnv("OVERTHROWER_DELAY", delay);
+    }
+};
+
+class OverthrowerConfiguratorPulse : public AbstractOverthrowerConfigurator {
+public:
+    OverthrowerConfiguratorPulse() = delete;
+    OverthrowerConfiguratorPulse(unsigned int delay, unsigned int duration)
+    {
+        setEnv("OVERTHROWER_STRATEGY", 2);
+        setEnv("OVERTHROWER_DELAY", delay);
+        setEnv("OVERTHROWER_DURATION", duration);
+    }
+};
+
+class OverthrowerConfiguratorNone : public AbstractOverthrowerConfigurator {
+public:
+    OverthrowerConfiguratorNone() { setEnv("OVERTHROWER_STRATEGY", 3); }
+};
 
 static void fragileCode()
 {
@@ -87,13 +107,13 @@ TEST(FragileCode, WithoutOverthrower)
 
 TEST(FragileCode, WithOverthrower)
 {
-    OverthrowerConfigurator overthrower_configurator(0);
+    OverthrowerConfiguratorRandom overthrower_configurator;
     EXPECT_DEATH(fragileCodeWithOverthrower(), "");
 }
 
 TEST(Overthrower, MemoryLeak)
 {
-    OverthrowerConfigurator overthrower_configurator(3);
+    OverthrowerConfiguratorNone overthrower_configurator;
     activateOverthrower();
     void* buffer = malloc(128);
     forced_memset(buffer, 0, 128);
@@ -103,7 +123,7 @@ TEST(Overthrower, MemoryLeak)
 
 TEST(Overthrower, Pause)
 {
-    OverthrowerConfigurator overthrower_configurator(0);
+    OverthrowerConfiguratorRandom overthrower_configurator;
     activateOverthrower();
     pauseOverthrower(0);
     fragileCode();
