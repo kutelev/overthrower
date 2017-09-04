@@ -222,6 +222,9 @@ extern "C" void activateOverthrower()
     printf("overthrower have to print useless string to force printf to do all preallocations: %s", tmp_buf);
 #endif
 
+    malloc_number = 0;
+    malloc_seq_num = 0;
+
     fprintf(stderr, "overthrower got activation signal.\n");
     fprintf(stderr, "overthrower will use following parameters for failing allocations:\n");
     strategy = readValFromEnvVar("OVERTHROWER_STRATEGY", STRATEGY_RANDOM, STRATEGY_NONE, STRATEGY_PULSE);
@@ -278,10 +281,10 @@ static int isTimeToFail()
         case STRATEGY_RANDOM:
             return ((unsigned int)rand() % duty_cycle == 0) ? 1 : 0;
         case STRATEGY_STEP:
-            return (__sync_add_and_fetch(&malloc_number, 1) + 1 > delay) ? 1 : 0;
+            return (__sync_add_and_fetch(&malloc_number, 1) > delay) ? 1 : 0;
         case STRATEGY_PULSE: {
-            unsigned int number = __sync_add_and_fetch(&malloc_number, 1) + 1;
-            return (number > delay && number < delay + duration) ? 1 : 0;
+            unsigned int number = __sync_add_and_fetch(&malloc_number, 1);
+            return (number > delay && number <= delay + duration) ? 1 : 0;
         }
         case STRATEGY_NONE:
             return 0;

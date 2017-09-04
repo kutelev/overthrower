@@ -1,7 +1,14 @@
+#include <numeric>
+
 #include <src/gmock-all.cc>
 #include <src/gtest-all.cc>
 
 #include "platform.h"
+
+#define STRATEGY_RANDOM 0
+#define STRATEGY_STEP 1
+#define STRATEGY_PULSE 2
+#define STRATEGY_NONE 3
 
 extern "C" {
 void activateOverthrower() __attribute__((weak));
@@ -52,7 +59,7 @@ public:
 
     OverthrowerConfiguratorRandom(unsigned int duty_cycle)
     {
-        setEnv("OVERTHROWER_STRATEGY", 0);
+        setEnv("OVERTHROWER_STRATEGY", STRATEGY_RANDOM);
         setEnv("OVERTHROWER_SEED", 0);
         setEnv("OVERTHROWER_DUTY_CYCLE", duty_cycle);
     }
@@ -63,7 +70,7 @@ public:
     OverthrowerConfiguratorStep() = delete;
     OverthrowerConfiguratorStep(unsigned int delay)
     {
-        setEnv("OVERTHROWER_STRATEGY", 1);
+        setEnv("OVERTHROWER_STRATEGY", STRATEGY_STEP);
         setEnv("OVERTHROWER_DELAY", delay);
     }
 };
@@ -73,7 +80,7 @@ public:
     OverthrowerConfiguratorPulse() = delete;
     OverthrowerConfiguratorPulse(unsigned int delay, unsigned int duration)
     {
-        setEnv("OVERTHROWER_STRATEGY", 2);
+        setEnv("OVERTHROWER_STRATEGY", STRATEGY_PULSE);
         setEnv("OVERTHROWER_DELAY", delay);
         setEnv("OVERTHROWER_DURATION", duration);
     }
@@ -81,12 +88,12 @@ public:
 
 class OverthrowerConfiguratorNone : public AbstractOverthrowerConfigurator {
 public:
-    OverthrowerConfiguratorNone() { setEnv("OVERTHROWER_STRATEGY", 3); }
+    OverthrowerConfiguratorNone() { setEnv("OVERTHROWER_STRATEGY", STRATEGY_NONE); }
 };
 
-static void fragileCode()
+static void fragileCode(unsigned int iterations = 100500)
 {
-    for (int i = 0; i < 100500; ++i) {
+    for (unsigned int i = 0; i < iterations; ++i) {
         char* string = strdup("string");
         forced_memset(string, 0, 6);
         free(string);
@@ -98,6 +105,41 @@ static void fragileCodeWithOverthrower()
     activateOverthrower();
     fragileCode();
     deactivateOverthrower();
+}
+
+static unsigned int failureCounter(unsigned int iterations, std::string& pattern)
+{
+    unsigned int counter = 0;
+    for (unsigned int i = 0; i < iterations; ++i) {
+        char* string = strdup("string");
+        if (string)
+            forced_memset(string, 0, 6);
+        else
+            ++counter;
+        pattern.push_back(string ? '+' : '-');
+        free(string);
+    }
+    return counter;
+}
+
+static std::string generateExpectedPattern(unsigned int strategy, unsigned int iterations, unsigned int delay = 0, unsigned int duration = 1)
+{
+    std::string pattern;
+    if (strategy == STRATEGY_STEP) {
+        for (unsigned int i = 0; i < delay && pattern.size() < iterations; ++i)
+            pattern.push_back('+');
+        while (pattern.size() < iterations)
+            pattern.push_back('-');
+    }
+    else if (strategy == STRATEGY_PULSE) {
+        for (unsigned int i = 0; i < delay && pattern.size() < iterations; ++i)
+            pattern.push_back('+');
+        for (unsigned int i = 0; i < duration && pattern.size() < iterations; ++i)
+            pattern.push_back('-');
+        while (pattern.size() < iterations)
+            pattern.push_back('+');
+    }
+    return pattern;
 }
 
 TEST(FragileCode, WithoutOverthrower)
@@ -128,5 +170,82 @@ TEST(Overthrower, Pause)
     pauseOverthrower(0);
     fragileCode();
     resumeOverthrower();
+    EXPECT_EQ(deactivateOverthrower(), 0);
+}
+
+TEST(Overthrower, StrategyRandom)
+{
+    static const unsigned int duty_cycle_variants[] = { 1, 2, 3, 5, 10, 20, 30, 50, 100 };
+    static const unsigned int expected_failure_count = 100;
+
+    std::string real_pattern;
+
+    for (unsigned int duty_cycle : duty_cycle_variants) {
+        const unsigned int iterations = duty_cycle * expected_failure_count;
+        real_pattern.reserve(iterations);
+        real_pattern.resize(0);
+        OverthrowerConfiguratorRandom overthrower_configurator(duty_cycle);
+        activateOverthrower();
+        const unsigned int allowed_delta = duty_cycle == 1 ? 0 : expected_failure_count / 10;
+        const unsigned int real_failure_count = failureCounter(iterations, real_pattern);
+        EXPECT_EQ(deactivateOverthrower(), 0);
+        EXPECT_GE(real_failure_count, expected_failure_count - allowed_delta);
+        EXPECT_LE(real_failure_count, expected_failure_count + allowed_delta);
+        if (duty_cycle == 1)
+            continue;
+        std::adjacent_difference(real_pattern.cbegin(), real_pattern.cend(), real_pattern.begin(), std::greater<char>());
+        const unsigned int switch_count = std::accumulate(real_pattern.cbegin() + 1, real_pattern.cend(), 0);
+        EXPECT_GE(switch_count, expected_failure_count / 2);
+    }
+}
+
+TEST(Overthrower, StrategyStep)
+{
+    static const unsigned int delay_variants[] = { 0, 1, 2, 3, 5 };
+    static const unsigned int iterations = 50;
+
+    std::string expected_pattern;
+    std::string real_pattern(iterations, '?');
+
+    for (unsigned int delay : delay_variants) {
+        expected_pattern = generateExpectedPattern(STRATEGY_STEP, iterations, delay);
+        real_pattern.resize(0);
+        OverthrowerConfiguratorStep overthrower_configurator(delay);
+        activateOverthrower();
+        const unsigned int failure_count = failureCounter(iterations, real_pattern);
+        EXPECT_EQ(deactivateOverthrower(), 0);
+        EXPECT_EQ(failure_count, iterations - delay);
+        EXPECT_EQ(real_pattern, expected_pattern);
+    }
+}
+
+TEST(Overthrower, StrategyPulse)
+{
+    static const unsigned int delay_variants[] = { 1, 2, 3, 5 };
+    static const unsigned int duration_variants[] = { 1, 2, 3, 5 };
+    static const unsigned int iterations = 50;
+
+    std::string expected_pattern;
+    std::string real_pattern(iterations, '?');
+
+    for (unsigned int delay : delay_variants) {
+        for (unsigned int duration : duration_variants) {
+            expected_pattern = generateExpectedPattern(STRATEGY_PULSE, iterations, delay, duration);
+            real_pattern.resize(0);
+            OverthrowerConfiguratorPulse overthrower_configurator(delay, duration);
+            activateOverthrower();
+            const unsigned int failure_count = failureCounter(iterations, real_pattern);
+            EXPECT_EQ(deactivateOverthrower(), 0);
+            EXPECT_EQ(failure_count, duration);
+            EXPECT_EQ(real_pattern, expected_pattern);
+        }
+    }
+}
+
+TEST(Overthrower, StrategyNone)
+{
+    OverthrowerConfiguratorNone overthrower_configurator;
+    activateOverthrower();
+    fragileCode();
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
