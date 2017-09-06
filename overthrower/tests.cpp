@@ -283,6 +283,7 @@ TEST(Overthrower, SettingErrno)
     EXPECT_GE(failure_count, iterations / 4);
 }
 
+#if defined(PLATFORM_OS_LINUX)
 TEST(Overthrower, ThrowingException)
 {
     class CustomException {
@@ -311,3 +312,4 @@ TEST(Overthrower, ThrowingException)
 
     EXPECT_GE(failure_count, iterations / 4);
 }
+#endif
