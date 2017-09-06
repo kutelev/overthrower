@@ -249,3 +249,65 @@ TEST(Overthrower, StrategyNone)
     fragileCode();
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
+
+TEST(Overthrower, SettingErrno)
+{
+    static const unsigned int iterations = 50;
+    unsigned int failure_count = 0;
+
+    OverthrowerConfiguratorRandom overthrower_configurator(2);
+    activateOverthrower();
+
+    for (unsigned int i = 0; i < iterations; ++i) {
+        errno = 0;
+        void* buffer = malloc(128);
+        pauseOverthrower(0);
+        if (buffer) {
+            forced_memset(buffer, 0, 128);
+            EXPECT_EQ(errno, 0);
+        }
+        else {
+            ++failure_count;
+            EXPECT_EQ(errno, ENOMEM);
+        }
+        resumeOverthrower();
+        const int old_errno = errno;
+        free(buffer);
+        pauseOverthrower(0);
+        EXPECT_EQ(errno, old_errno);
+        resumeOverthrower();
+    }
+
+    EXPECT_EQ(deactivateOverthrower(), 0);
+
+    EXPECT_GE(failure_count, iterations / 4);
+}
+
+TEST(Overthrower, ThrowingException)
+{
+    class CustomException {
+    public:
+        CustomException() = default;
+
+        char placeholder[16384];
+    };
+
+    static const unsigned int iterations = 5000;
+    unsigned int failure_count = 0;
+
+    OverthrowerConfiguratorRandom overthrower_configurator(2);
+    activateOverthrower();
+
+    for (unsigned int i = 0; i < iterations; ++i) {
+        try {
+            throw CustomException();
+        }
+        catch (const CustomException&) {
+            ++failure_count;
+        }
+    }
+
+    EXPECT_EQ(deactivateOverthrower(), 0);
+
+    EXPECT_GE(failure_count, iterations / 4);
+}

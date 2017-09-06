@@ -334,7 +334,7 @@ static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
         is_in_ignore_list = true;
     }
 #else
-    if (count >= 2 && strstr(symbols[1], "__cxa_allocate_exception"))
+    if (count >= 3 && (strstr(symbols[2], "__cxa_allocate_exception") || strstr(symbols[1], "__cxa_allocate_exception")))
         is_in_white_list = true;
     if (count >= 3 && strstr(symbols[2], "ld-linux"))
         is_in_ignore_list = true;
@@ -344,7 +344,7 @@ static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
 
 #if 0
     for (int i = 1; i < count; ++i )
-        printf("%s\n", symbols[i]);
+        printf("%d: %s\n", i, symbols[i]);
 #endif
 
     free(symbols);
