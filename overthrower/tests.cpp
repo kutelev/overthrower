@@ -176,7 +176,7 @@ TEST(Overthrower, Pause)
 TEST(Overthrower, StrategyRandom)
 {
     static const unsigned int duty_cycle_variants[] = { 1, 2, 3, 5, 10, 20, 30, 50, 100 };
-    static const unsigned int expected_failure_count = 100;
+    static const unsigned int expected_failure_count = 1000;
 
     std::string real_pattern;
 
@@ -195,7 +195,7 @@ TEST(Overthrower, StrategyRandom)
             continue;
         std::adjacent_difference(real_pattern.cbegin(), real_pattern.cend(), real_pattern.begin(), std::greater<char>());
         const unsigned int switch_count = std::accumulate(real_pattern.cbegin() + 1, real_pattern.cend(), 0);
-        EXPECT_GE(switch_count, expected_failure_count / 2);
+        EXPECT_GE(switch_count, expected_failure_count * 9 / 20);
     }
 }
 
