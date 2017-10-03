@@ -163,13 +163,39 @@ TEST(Overthrower, MemoryLeak)
     free(buffer);
 }
 
-TEST(Overthrower, Pause)
+TEST(Overthrower, LongTermPause)
 {
     OverthrowerConfiguratorRandom overthrower_configurator;
     activateOverthrower();
     pauseOverthrower(0);
     fragileCode();
     resumeOverthrower();
+    EXPECT_EQ(deactivateOverthrower(), 0);
+}
+
+TEST(Overthrower, ShortTermPause)
+{
+    static const unsigned int duration_variants[] = { 1, 2, 3, 5 };
+    static const unsigned int iterations = 10;
+
+    std::string expected_pattern;
+    std::string real_pattern(iterations, '?');
+
+    OverthrowerConfiguratorStep overthrower_configurator(0);
+    activateOverthrower();
+    for (unsigned int duration : duration_variants) {
+        pauseOverthrower(0);
+        expected_pattern = generateExpectedPattern(STRATEGY_STEP, iterations, duration);
+        resumeOverthrower();
+        real_pattern.resize(0);
+        pauseOverthrower(duration);
+        const unsigned int real_failure_count = failureCounter(iterations, real_pattern);
+        resumeOverthrower();
+        pauseOverthrower(0);
+        EXPECT_EQ(real_failure_count, iterations - duration);
+        EXPECT_EQ(real_pattern, expected_pattern);
+        resumeOverthrower();
+    }
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
 
