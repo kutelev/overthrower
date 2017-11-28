@@ -54,7 +54,6 @@ void nonFailingFree(void* pointer);
 static const char* strategy_names[4] = { "random", "step", "pulse", "none" };
 
 static unsigned int activated = 0;
-static unsigned int paused = 0;
 static unsigned int strategy = STRATEGY_RANDOM;
 static unsigned int seed = 0;
 static unsigned int duty_cycle = 1024;
@@ -84,6 +83,7 @@ private:
 };
 
 static ThreadLocal<void> is_tracing;
+static ThreadLocal<void> paused;
 
 template<class T>
 class mallocFreeAllocator {
@@ -130,7 +130,7 @@ public:
     void destroy(pointer p) { p->~T(); }
 };
 
-static std::mutex mutex;
+static std::recursive_mutex mutex;
 static std::unordered_map<void*, unsigned int, std::hash<void*>, std::equal_to<void*>, mallocFreeAllocator<std::pair<void* const, unsigned int>>> allocated;
 
 extern "C" unsigned int deactivateOverthrower();
@@ -267,12 +267,12 @@ extern "C" unsigned int deactivateOverthrower()
 
 extern "C" void pauseOverthrower(unsigned int duration)
 {
-    paused = duration == 0 ? UINT_MAX : duration;
+    paused = reinterpret_cast<void*>(duration == 0 ? UINT_MAX : duration);
 }
 
 extern "C" void resumeOverthrower()
 {
-    paused = 0;
+    paused = nullptr;
 }
 
 static int isTimeToFail()
@@ -368,28 +368,28 @@ void* malloc(size_t size)
 
     if (!is_tracing) {
         is_tracing = reinterpret_cast<void*>(-1);
-        const unsigned int old_paused = paused;
+        const uintptr_t old_paused = reinterpret_cast<uintptr_t>(*paused);
         pauseOverthrower(0);
         searchKnowledgeBase(is_in_white_list, is_in_ignore_list);
-        paused = old_paused;
+        paused = reinterpret_cast<void*>(old_paused);
         is_tracing = nullptr;
     }
 
-    if (!is_in_white_list && (activated != 0) && (paused == 0) && (size != 0) && isTimeToFail()) {
+    if (!is_in_white_list && activated && !paused && size && isTimeToFail()) {
         errno = ENOMEM;
         return NULL;
     }
 
     pointer = nonFailingMalloc(size);
 
-    if (!is_in_ignore_list && activated != 0 && pointer != NULL && paused == 0) {
-        std::lock_guard<std::mutex> lock(mutex);
+    if (!is_in_ignore_list && activated && !paused && pointer) {
+        std::lock_guard<std::recursive_mutex> lock(mutex);
         malloc_seq_num++;
         allocated.insert({ pointer, malloc_seq_num });
     }
 
     if (paused)
-        --paused;
+        paused = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(*paused) - 1);
 
     return pointer;
 }
@@ -402,7 +402,7 @@ void free(void* pointer)
 {
     int old_errno = errno;
     if (activated != 0 && pointer != NULL) {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::lock_guard<std::recursive_mutex> lock(mutex);
         allocated.erase(pointer);
     }
 
