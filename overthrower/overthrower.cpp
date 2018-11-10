@@ -27,11 +27,29 @@
 #endif
 
 typedef void* (*Malloc)(size_t size);
+typedef void* (*Realloc)(void* pointer, size_t size);
 typedef void (*Free)(void* pointer);
 
 #if !defined(__APPLE__)
 static Malloc native_malloc = NULL;
+static Realloc native_realloc = NULL;
 static Free native_free = NULL;
+#endif
+
+#if defined(__APPLE__)
+#define my_malloc my_malloc
+#define my_free my_free
+#define my_realloc my_realloc
+#define native_malloc malloc
+#define native_free free
+#define native_realloc realloc
+#else
+#define my_malloc malloc
+#define my_free free
+#define my_realloc realloc
+#define native_malloc native_malloc
+#define native_free native_free
+#define native_realloc native_realloc
 #endif
 
 void* nonFailingMalloc(size_t size);
@@ -85,6 +103,11 @@ private:
 static ThreadLocal<void> is_tracing;
 static ThreadLocal<void> paused;
 
+struct Info {
+    unsigned int seq_num;
+    size_t size;
+};
+
 template<class T>
 class mallocFreeAllocator {
 public:
@@ -131,7 +154,7 @@ public:
 };
 
 static std::recursive_mutex mutex;
-static std::unordered_map<void*, unsigned int, std::hash<void*>, std::equal_to<void*>, mallocFreeAllocator<std::pair<void* const, unsigned int>>> allocated;
+static std::unordered_map<void*, Info, std::hash<void*>, std::equal_to<void*>, mallocFreeAllocator<std::pair<void* const, Info>>> allocated;
 
 extern "C" unsigned int deactivateOverthrower();
 
@@ -156,6 +179,7 @@ static void initialize()
 {
     if (native_malloc == NULL) {
         native_malloc = (Malloc)dlsym(RTLD_NEXT, "malloc");
+        native_realloc = (Realloc)dlsym(RTLD_NEXT, "realloc");
         native_free = (Free)dlsym(RTLD_NEXT, "free");
     }
 }
@@ -257,7 +281,7 @@ extern "C" unsigned int deactivateOverthrower()
     if (!allocated.empty()) {
         fprintf(stderr, "overthrower has detected not freed memory blocks with following addresses:\n");
         for (const auto& v : allocated)
-            fprintf(stderr, "0x%016" PRIxPTR " - %6d\n", (uintptr_t)v.first, v.second);
+            fprintf(stderr, "0x%016" PRIxPTR " - %6d - %6zd\n", (uintptr_t)v.first, v.second.seq_num, v.second.size);
     }
 
     const unsigned int blocks_leaked = allocated.size();
@@ -305,11 +329,7 @@ void* nonFailingMalloc(size_t size)
 
 void nonFailingFree(void* pointer)
 {
-#if defined(__APPLE__)
-    return free(pointer);
-#else
-    return native_free(pointer);
-#endif
+    native_free(pointer);
 }
 
 static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
@@ -350,11 +370,7 @@ static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
     free(symbols);
 }
 
-#if defined(__APPLE__)
 void* my_malloc(size_t size)
-#else
-void* malloc(size_t size)
-#endif
 {
     void* pointer;
 
@@ -385,7 +401,7 @@ void* malloc(size_t size)
     if (!is_in_ignore_list && activated && !paused && pointer) {
         std::lock_guard<std::recursive_mutex> lock(mutex);
         malloc_seq_num++;
-        allocated.insert({ pointer, malloc_seq_num });
+        allocated.insert({ pointer, { malloc_seq_num, size } });
     }
 
     if (paused)
@@ -394,11 +410,7 @@ void* malloc(size_t size)
     return pointer;
 }
 
-#if defined(__APPLE__)
 void my_free(void* pointer)
-#else
-void free(void* pointer)
-#endif
 {
     int old_errno = errno;
     if (activated != 0 && pointer != NULL) {
@@ -406,12 +418,33 @@ void free(void* pointer)
         allocated.erase(pointer);
     }
 
-#if defined(__APPLE__)
-    free(pointer);
-#else
     native_free(pointer);
-#endif
     errno = old_errno;
+}
+
+void* my_realloc(void* pointer, size_t size)
+{
+    if (pointer == NULL)
+        return my_malloc(size);
+
+    if (size == 0 && pointer != NULL) {
+        my_free(pointer);
+        return NULL;
+    }
+
+    if (allocated.count(pointer) == 0)
+        return native_realloc(pointer, size);
+
+    const size_t old_size = allocated.at(pointer).size;
+    void* new_ptr = my_malloc(size);
+
+    if (new_ptr == NULL)
+        return NULL;
+
+    memcpy(new_ptr, pointer, old_size < size ? old_size : size);
+    my_free(pointer);
+
+    return new_ptr;
 }
 
 #if defined(__APPLE__)
@@ -420,6 +453,6 @@ typedef struct interpose_s {
     void* original;
 } interpose_t;
 
-__attribute__((used)) static const interpose_t interposing_functions[]
-    __attribute__((section("__DATA, __interpose"))) = { { (void*)my_malloc, (void*)malloc }, { (void*)my_free, (void*)free } };
+__attribute__((used)) static const interpose_t interposing_functions[] __attribute__((
+    section("__DATA, __interpose"))) = { { (void*)my_malloc, (void*)malloc }, { (void*)my_realloc, (void*)realloc }, { (void*)my_free, (void*)free } };
 #endif
