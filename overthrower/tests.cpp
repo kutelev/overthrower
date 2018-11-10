@@ -22,7 +22,7 @@ void* (*volatile forced_memset)(void*, int, size_t) = memset;
 GTEST_API_ int main(int argc, char** argv)
 {
     if (!activateOverthrower || !deactivateOverthrower || !pauseOverthrower || !resumeOverthrower) {
-        fprintf(stderr, "Seems like overthrower has not been injected or not fully available. Nothing to do.");
+        fprintf(stderr, "Seems like overthrower has not been injected or not fully available. Nothing to do.\n");
         return EXIT_FAILURE;
     }
 
@@ -161,6 +161,50 @@ TEST(Overthrower, MemoryLeak)
     forced_memset(buffer, 0, 128);
     EXPECT_EQ(deactivateOverthrower(), 1);
     free(buffer);
+}
+
+TEST(Overthrower, DoubleActivation)
+{
+    OverthrowerConfiguratorNone overthrower_configurator;
+    activateOverthrower();
+    activateOverthrower();
+    void* buffer = malloc(128);
+    forced_memset(buffer, 0, 128);
+    free(buffer);
+    EXPECT_EQ(deactivateOverthrower(), 0);
+
+    activateOverthrower();
+    buffer = malloc(128);
+    forced_memset(buffer, 0, 128);
+    EXPECT_EQ(deactivateOverthrower(), 1);
+    free(buffer);
+}
+
+TEST(Overthrower, DoubleDeactivation)
+{
+    OverthrowerConfiguratorNone overthrower_configurator;
+    activateOverthrower();
+    void* buffer = malloc(128);
+    forced_memset(buffer, 0, 128);
+    free(buffer);
+    EXPECT_EQ(deactivateOverthrower(), 0);
+    EXPECT_EQ(deactivateOverthrower(), 0);
+
+    activateOverthrower();
+    buffer = malloc(128);
+    forced_memset(buffer, 0, 128);
+    EXPECT_EQ(deactivateOverthrower(), 1);
+    free(buffer);
+}
+
+TEST(Overthrower, FreePreAllocated)
+{
+    void* buffer = malloc(128);
+    forced_memset(buffer, 0, 128);
+    OverthrowerConfiguratorNone overthrower_configurator;
+    activateOverthrower();
+    free(buffer);
+    EXPECT_EQ(deactivateOverthrower(), 0);
 }
 
 TEST(Overthrower, LongTermPause)
@@ -309,6 +353,27 @@ TEST(Overthrower, SettingErrno)
     EXPECT_GE(failure_count, iterations / 4);
 }
 
+TEST(Overthrower, PreservingErrnoWithoutOverthrower)
+{
+    void* buffer = malloc(128);
+    forced_memset(buffer, 0, 128);
+    errno = 100500;
+    free(buffer);
+    EXPECT_EQ(errno, 100500);
+}
+
+TEST(Overthrower, PreservingErrnoWithOverthrower)
+{
+    OverthrowerConfiguratorNone overthrower_configurator;
+    activateOverthrower();
+    void* buffer = malloc(128);
+    forced_memset(buffer, 0, 128);
+    errno = 100500;
+    free(buffer);
+    EXPECT_EQ(errno, 100500);
+    EXPECT_EQ(deactivateOverthrower(), 0);
+}
+
 #if defined(PLATFORM_OS_LINUX)
 TEST(Overthrower, ThrowingException)
 {
@@ -340,18 +405,104 @@ TEST(Overthrower, ThrowingException)
 }
 #endif
 
-TEST(Overthrower, Realloc)
+TEST(Overthrower, ReallocNonFailing)
 {
     static const size_t sizes[] = { 2,     4,     8,      16,     32,     64,      128,     256,     512,     1024,     2048,     4096,     8192,     16384,
                                     32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728 };
     OverthrowerConfiguratorNone overthrower_configurator;
     activateOverthrower();
     void* buffer = malloc(1);
+    forced_memset(buffer, 0, 1);
+    ASSERT_NE(buffer, nullptr);
     for (size_t size : sizes) {
         buffer = realloc(buffer, size);
         ASSERT_NE(buffer, nullptr);
         forced_memset(buffer, 0, size);
     }
     free(buffer);
+    EXPECT_EQ(deactivateOverthrower(), 0);
+
+    buffer = malloc(128);
+    ASSERT_NE(buffer, nullptr);
+    forced_memset(buffer, 0, 128);
+    activateOverthrower();
+    buffer = realloc(buffer, 256);
+    ASSERT_NE(buffer, nullptr);
+    forced_memset(buffer, 0, 256);
+    free(buffer);
+    EXPECT_EQ(deactivateOverthrower(), 0);
+}
+
+TEST(Overthrower, ReallocFailing)
+{
+    static const size_t sizes[] = { 2,     4,     8,      16,     32,     64,      128,     256,     512,     1024,     2048,     4096,     8192,     16384,
+                                    32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728 };
+    OverthrowerConfiguratorRandom overthrower_configurator(2);
+    activateOverthrower();
+    void* buffer = nullptr;
+    while (!buffer)
+        buffer = malloc(1);
+    forced_memset(buffer, 0, 1);
+    for (size_t size : sizes) {
+        void* new_buffer = realloc(buffer, size);
+        if (!new_buffer) {
+            EXPECT_EQ(errno, ENOMEM);
+            continue;
+        }
+        buffer = new_buffer;
+        forced_memset(buffer, 0, size);
+    }
+    free(buffer);
+    EXPECT_EQ(deactivateOverthrower(), 0);
+}
+
+TEST(Overthrower, ReallocAllocate)
+{
+    OverthrowerConfiguratorNone overthrower_configurator;
+    activateOverthrower();
+    void* buffer = realloc(nullptr, 128);
+    ASSERT_NE(buffer, nullptr);
+    forced_memset(buffer, 0, 128);
+    buffer = realloc(buffer, 256);
+    ASSERT_NE(buffer, nullptr);
+    forced_memset(buffer, 0, 256);
+    free(buffer);
+    EXPECT_EQ(deactivateOverthrower(), 0);
+
+    buffer = realloc(nullptr, 128);
+    ASSERT_NE(buffer, nullptr);
+    forced_memset(buffer, 0, 128);
+    activateOverthrower();
+    buffer = realloc(buffer, 256);
+    ASSERT_NE(buffer, nullptr);
+    forced_memset(buffer, 0, 256);
+    free(buffer);
+    EXPECT_EQ(deactivateOverthrower(), 0);
+}
+
+TEST(Overthrower, ReallocDeallocateWithoutOverthrower)
+{
+    void* buffer = realloc(nullptr, 128);
+    ASSERT_NE(buffer, nullptr);
+    forced_memset(buffer, 0, 128);
+    buffer = realloc(buffer, 256);
+    ASSERT_NE(buffer, nullptr);
+    forced_memset(buffer, 0, 256);
+    buffer = realloc(buffer, 0);
+    ASSERT_EQ(buffer, nullptr);
+}
+
+TEST(Overthrower, ReallocDeallocateWithOverthrower)
+{
+    OverthrowerConfiguratorNone overthrower_configurator;
+    activateOverthrower();
+    void* buffer = realloc(nullptr, 128);
+    ASSERT_NE(buffer, nullptr);
+    forced_memset(buffer, 0, 128);
+    buffer = realloc(buffer, 256);
+    ASSERT_NE(buffer, nullptr);
+    forced_memset(buffer, 0, 256);
+    buffer = realloc(buffer, 0);
+    ASSERT_EQ(buffer, nullptr);
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
