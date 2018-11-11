@@ -20,36 +20,36 @@
 #include <new>
 #include <unordered_map>
 
-#if defined(__APPLE__)
+#include "platform.h"
+
 #define MAX_STACK_DEPTH 4
-#else
-#define MAX_STACK_DEPTH 4
-#endif
 
 typedef void* (*Malloc)(size_t size);
 typedef void* (*Realloc)(void* pointer, size_t size);
 typedef void (*Free)(void* pointer);
 
-#if !defined(__APPLE__)
+#if defined(PLATFORM_OS_LINUX)
 static Malloc native_malloc = NULL;
 static Realloc native_realloc = NULL;
 static Free native_free = NULL;
 #endif
 
-#if defined(__APPLE__)
+#if defined(PLATFORM_OS_MAC_OS_X)
 #define my_malloc my_malloc
 #define my_free my_free
 #define my_realloc my_realloc
 #define native_malloc malloc
 #define native_free free
 #define native_realloc realloc
-#else
+#elif defined(PLATFORM_OS_LINUX)
 #define my_malloc malloc
 #define my_free free
 #define my_realloc realloc
 #define native_malloc native_malloc
 #define native_free native_free
 #define native_realloc native_realloc
+#else
+#error "Unsupported OS"
 #endif
 
 void* nonFailingMalloc(size_t size);
@@ -64,7 +64,8 @@ void nonFailingFree(void* pointer);
 #define MAX_DUTY_CYCLE 4096
 
 #define MIN_DELAY 0
-#define MAX_DELAY 1000
+#define MAX_RANDOM_DELAY 1000
+#define MAX_DELAY 1000000
 
 #define MIN_DURATION 1
 #define MAX_DURATION 100
@@ -174,14 +175,15 @@ __attribute__((destructor)) static void shutdown()
     deactivateOverthrower();
 }
 
-#if !defined(__APPLE__)
+#if defined(PLATFORM_OS_LINUX)
 static void initialize()
 {
-    if (native_malloc == NULL) {
-        native_malloc = (Malloc)dlsym(RTLD_NEXT, "malloc");
-        native_realloc = (Realloc)dlsym(RTLD_NEXT, "realloc");
-        native_free = (Free)dlsym(RTLD_NEXT, "free");
-    }
+    if (native_malloc != NULL)
+        return;
+
+    native_malloc = (Malloc)dlsym(RTLD_NEXT, "malloc");
+    native_realloc = (Realloc)dlsym(RTLD_NEXT, "realloc");
+    native_free = (Free)dlsym(RTLD_NEXT, "free");
 }
 #endif
 
@@ -224,7 +226,7 @@ static unsigned int readValFromEnvVar(const char* env_var_name, unsigned int min
         return random_value;
     }
     else if (strToUnsignedLongInt(env_var_val, &value) || value < min_val || value > max_val) {
-        const unsigned int random_value = generateRandomValue(min_val, max_val);
+        const unsigned int random_value = generateRandomValue(min_val, max_random_val ? max_random_val : max_val);
         fprintf(stderr, "%s has incorrect value (%s). Using a random value (%u).\n", env_var_name, env_var_val, random_value);
         return random_value;
     }
@@ -234,7 +236,7 @@ static unsigned int readValFromEnvVar(const char* env_var_name, unsigned int min
 
 extern "C" void activateOverthrower()
 {
-#if defined(__APPLE__)
+#if defined(PLATFORM_OS_MAC_OS_X)
     // Mac OS X implementation uses malloc inside printf.
     // To prevent crashes we have to force printf to do all his allocations before
     // we activated the overthrower.
@@ -261,7 +263,7 @@ extern "C" void activateOverthrower()
         fprintf(stderr, "Seed = %u\n", seed);
     }
     else if (strategy != STRATEGY_NONE) {
-        delay = readValFromEnvVar("OVERTHROWER_DELAY", MIN_DELAY, MAX_DELAY);
+        delay = readValFromEnvVar("OVERTHROWER_DELAY", MIN_DELAY, MAX_DELAY, MAX_RANDOM_DELAY);
         fprintf(stderr, "Delay = %u\n", delay);
         if (strategy == STRATEGY_PULSE) {
             duration = readValFromEnvVar("OVERTHROWER_DURATION", MIN_DURATION, MAX_DURATION);
@@ -320,10 +322,12 @@ static int isTimeToFail()
 
 void* nonFailingMalloc(size_t size)
 {
-#if defined(__APPLE__)
+#if defined(PLATFORM_OS_MAC_OS_X)
     return malloc(size);
-#else
+#elif defined(PLATFORM_OS_LINUX)
     return native_malloc ? native_malloc(size) : malloc(size);
+#else
+#error "Unsupported OS"
 #endif
 }
 
@@ -346,20 +350,22 @@ static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
     is_in_white_list = false;
     is_in_ignore_list = false;
 
-#if defined(__APPLE__)
+#if defined(PLATFORM_OS_MAC_OS_X)
     if (count >= 4 && (strstr(symbols[3], "__cxa_allocate_exception") || strstr(symbols[2], "__cxa_allocate_exception")))
         is_in_white_list = true;
     if (count >= 4 && (strstr(symbols[3], "__cxa_atexit") || strstr(symbols[2], "__cxa_atexit"))) {
         is_in_white_list = true;
         is_in_ignore_list = true;
     }
-#else
+#elif defined(PLATFORM_OS_LINUX)
     if (count >= 3 && (strstr(symbols[2], "__cxa_allocate_exception") || strstr(symbols[1], "__cxa_allocate_exception")))
         is_in_white_list = true;
     if (count >= 3 && strstr(symbols[2], "ld-linux"))
         is_in_ignore_list = true;
     if (count >= 4 && strstr(symbols[3], "dlerror"))
         is_in_ignore_list = true;
+#else
+#error "Unsupported OS"
 #endif
 
 #if 0
@@ -374,7 +380,7 @@ void* my_malloc(size_t size)
 {
     void* pointer;
 
-#if !defined(__APPLE__)
+#if defined(PLATFORM_OS_LINUX)
     if (native_malloc == NULL)
         initialize();
 #endif
@@ -447,7 +453,7 @@ void* my_realloc(void* pointer, size_t size)
     return new_ptr;
 }
 
-#if defined(__APPLE__)
+#if defined(PLATFORM_OS_MAC_OS_X)
 typedef struct interpose_s {
     void* substitute;
     void* original;
