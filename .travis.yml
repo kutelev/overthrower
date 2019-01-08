@@ -1,17 +1,28 @@
 language: cpp
 
 script:
-- cd overthrower
-- git clone --branch release-1.8.0 --depth 1 https://github.com/google/googletest.git
-- cd ..
+- git clone --branch release-1.8.1 --depth 1 https://github.com/google/googletest.git
 - cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=1 .
 - cmake --build . --config Release
-- python ./tests/test.py
+- if [[ "$PLATFORM" == "linux" ]]; then LD_LIBRARY_PATH=. LD_PRELOAD=liboverthrower.so ./overthrower_tests; fi
+- if [[ "$PLATFORM" == "macos" ]]; then DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=./overthrower.framework/Versions/Current/overthrower ./overthrower_tests; fi
 
 matrix:
-    include:
-        - os: linux
-          dist: trusty
-          sudo: false
-        - os: osx
-          osx_image: xcode8
+  include:
+    - os: linux
+      dist: trusty
+      sudo: false
+      env: PLATFORM=linux
+    - os: linux
+      dist: xenial
+      sudo: false
+      env: PLATFORM=linux
+    - os: osx
+      osx_image: xcode8.3
+      env: PLATFORM=macos
+    - os: osx
+      osx_image: xcode9.4
+      env: PLATFORM=macos
+    - os: osx
+      osx_image: xcode10.1
+      env: PLATFORM=macos

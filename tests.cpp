@@ -3,19 +3,13 @@
 #include <src/gmock-all.cc>
 #include <src/gtest-all.cc>
 
+#include "overthrower.h"
 #include "platform.h"
 
 #define STRATEGY_RANDOM 0
 #define STRATEGY_STEP 1
 #define STRATEGY_PULSE 2
 #define STRATEGY_NONE 3
-
-extern "C" {
-void activateOverthrower() __attribute__((weak));
-unsigned int deactivateOverthrower() __attribute__((weak));
-void pauseOverthrower(unsigned int duration) __attribute__((weak));
-void resumeOverthrower() __attribute__((weak));
-}
 
 void* (*volatile forced_memset)(void*, int, size_t) = memset;
 
