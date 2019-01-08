@@ -11,7 +11,7 @@
 #define STRATEGY_PULSE 2
 #define STRATEGY_NONE 3
 
-void* (*volatile forced_memset)(void*, int, size_t) = memset;
+static void* (*volatile forced_memset)(void*, int, size_t) = memset;
 
 GTEST_API_ int main(int argc, char** argv)
 {
@@ -499,4 +499,12 @@ TEST(Overthrower, ReallocDeallocateWithOverthrower)
     buffer = realloc(buffer, 0);
     ASSERT_EQ(buffer, nullptr);
     EXPECT_EQ(deactivateOverthrower(), 0);
+}
+
+extern "C" void* somePureCFunction();
+
+TEST(Overthrower, PureC)
+{
+    OverthrowerConfiguratorStep overthrower_configurator(0);
+    ASSERT_EQ(somePureCFunction(), nullptr);
 }
