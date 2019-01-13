@@ -1,3 +1,4 @@
+#include <atomic>
 #include <numeric>
 #include <thread>
 
@@ -422,6 +423,52 @@ TEST(Overthrower, ThrowingException)
     EXPECT_EQ(deactivateOverthrower(), 0);
 
     EXPECT_GE(failure_count, iterations / 4);
+}
+#endif
+
+#if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
+TEST(Overthrower, CreatingThreads)
+{
+    static const unsigned int duty_cycle_variants[] = { 1, 2, 3, 5, 10, 20, 30, 50, 100 };
+    static constexpr unsigned int thread_count = 128;
+
+    std::atomic<unsigned int> success_count{};
+    unsigned int failure_count = 0;
+
+    std::thread threads[thread_count];
+
+    auto thread_routine = [&success_count]() { ++success_count; };
+
+    for (unsigned int duty_cycle : duty_cycle_variants) {
+        OverthrowerConfiguratorRandom overthrower_configurator(duty_cycle);
+        activateOverthrower();
+
+        for (auto& thread : threads) {
+            try {
+                thread = std::thread(thread_routine);
+            }
+            catch (const std::bad_alloc&) {
+                ++failure_count;
+            }
+        }
+
+        for (auto& thread : threads) {
+            if (thread.joinable())
+                thread.join();
+        }
+
+        pauseOverthrower(0);
+        if (duty_cycle == 1) {
+            EXPECT_EQ(success_count, 0);
+            EXPECT_EQ(failure_count, thread_count);
+        }
+        resumeOverthrower();
+
+        EXPECT_EQ(deactivateOverthrower(), 0);
+    }
+
+    EXPECT_GT(failure_count, thread_count);
+    EXPECT_EQ(success_count + failure_count, thread_count * (sizeof(duty_cycle_variants) / sizeof(duty_cycle_variants[0])));
 }
 #endif
 
