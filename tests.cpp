@@ -1,4 +1,5 @@
 #include <numeric>
+#include <thread>
 
 #include <src/gmock-all.cc>
 #include <src/gtest-all.cc>
@@ -211,19 +212,15 @@ TEST(Overthrower, LongTermPause)
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
 
-TEST(Overthrower, ShortTermPause)
+static void validateShortPauseCorrectness()
 {
-    static const unsigned int duration_variants[] = { 1, 2, 3, 5 };
-    static const unsigned int iterations = 10;
+    static constexpr unsigned int duration_variants[] = { 1, 2, 3, 5 };
+    static constexpr unsigned int iterations = 10;
 
-    std::string expected_pattern;
-    std::string real_pattern(iterations, '?');
-
-    OverthrowerConfiguratorStep overthrower_configurator(0);
-    activateOverthrower();
     for (unsigned int duration : duration_variants) {
         pauseOverthrower(0);
-        expected_pattern = generateExpectedPattern(STRATEGY_STEP, iterations, duration);
+        std::string expected_pattern = generateExpectedPattern(STRATEGY_STEP, iterations, duration);
+        std::string real_pattern(iterations, '?');
         resumeOverthrower();
         real_pattern.resize(0);
         pauseOverthrower(duration);
@@ -234,8 +231,37 @@ TEST(Overthrower, ShortTermPause)
         EXPECT_EQ(real_pattern, expected_pattern);
         resumeOverthrower();
     }
+}
+
+TEST(Overthrower, SingleThreadShortTermPause)
+{
+    OverthrowerConfiguratorStep overthrower_configurator(0);
+    activateOverthrower();
+    validateShortPauseCorrectness();
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
+
+#if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
+TEST(Overthrower, MultipleThreadsShortTermPause)
+{
+    static constexpr unsigned int thread_count = 128;
+
+    OverthrowerConfiguratorStep overthrower_configurator(0);
+    activateOverthrower();
+    pauseOverthrower(0);
+
+    std::thread threads[thread_count];
+
+    for (auto& thread : threads)
+        thread = std::thread(validateShortPauseCorrectness);
+
+    for (auto& thread : threads)
+        thread.join();
+
+    resumeOverthrower();
+    EXPECT_EQ(deactivateOverthrower(), 0);
+}
+#endif
 
 TEST(Overthrower, StrategyRandom)
 {
