@@ -21,6 +21,11 @@
 #include <unordered_map>
 
 #include "platform.h"
+#include "thread_local.h"
+
+#if !defined(PLATFORM_OS_MAC_OS_X) && !defined(PLATFORM_OS_LINUX)
+#error "Unsupported OS"
+#endif
 
 #define MAX_STACK_DEPTH 4
 
@@ -29,9 +34,9 @@ typedef void* (*Realloc)(void* pointer, size_t size);
 typedef void (*Free)(void* pointer);
 
 #if defined(PLATFORM_OS_LINUX)
-static Malloc native_malloc = NULL;
-static Realloc native_realloc = NULL;
-static Free native_free = NULL;
+static Malloc native_malloc = nullptr;
+static Realloc native_realloc = nullptr;
+static Free native_free = nullptr;
 #endif
 
 #if defined(PLATFORM_OS_MAC_OS_X)
@@ -48,8 +53,6 @@ static Free native_free = NULL;
 #define native_malloc native_malloc
 #define native_free native_free
 #define native_realloc native_realloc
-#else
-#error "Unsupported OS"
 #endif
 
 void* nonFailingMalloc(size_t size);
@@ -81,28 +84,15 @@ static unsigned int duration = MIN_DURATION;
 static unsigned int malloc_number = 0;
 static unsigned int malloc_seq_num = 0;
 
-template<typename T>
-class ThreadLocal final {
-public:
-    ThreadLocal() { pthread_key_create(&key, NULL); }
-    ~ThreadLocal() { pthread_key_delete(key); }
+static thread_local bool is_tracing = false;
+static thread_local unsigned int paused = 0;
 
-    void operator=(const T* value) { set(value); }
-
-    const T* operator*() const { return get(); }
-    T* operator->() const { return get(); }
-    operator bool() const { return get(); }
-    operator T*() const { return get(); }
-
-private:
-    void set(const T* value) { pthread_setspecific(key, value); }
-    T* get() const { return reinterpret_cast<T*>(pthread_getspecific(key)); }
-
-    pthread_key_t key;
-};
-
-static ThreadLocal<void> is_tracing;
-static ThreadLocal<void> paused;
+#if defined(PLATFORM_OS_MAC_OS_X)
+static ThreadLocal<bool> initialized;
+static ThreadLocal<bool> initializing;
+#elif defined(PLATFORM_OS_LINUX)
+static bool initialized;
+#endif
 
 struct Info {
     unsigned int seq_num;
@@ -159,6 +149,22 @@ static std::unordered_map<void*, Info, std::hash<void*>, std::equal_to<void*>, m
 
 extern "C" unsigned int deactivateOverthrower();
 
+static void initialize()
+{
+    assert(initialized == false);
+#if defined(PLATFORM_OS_MAC_OS_X)
+    initializing = true;
+    is_tracing = false;
+    paused = 0;
+    initializing = false;
+#elif defined(PLATFORM_OS_LINUX)
+    native_malloc = (Malloc)dlsym(RTLD_NEXT, "malloc");
+    native_realloc = (Realloc)dlsym(RTLD_NEXT, "realloc");
+    native_free = (Free)dlsym(RTLD_NEXT, "free");
+#endif
+    initialized = true;
+}
+
 __attribute__((constructor)) static void banner()
 {
     fprintf(stderr, "overthrower is waiting for the activation signal ...\n");
@@ -174,18 +180,6 @@ __attribute__((destructor)) static void shutdown()
 
     deactivateOverthrower();
 }
-
-#if defined(PLATFORM_OS_LINUX)
-static void initialize()
-{
-    if (native_malloc != NULL)
-        return;
-
-    native_malloc = (Malloc)dlsym(RTLD_NEXT, "malloc");
-    native_realloc = (Realloc)dlsym(RTLD_NEXT, "realloc");
-    native_free = (Free)dlsym(RTLD_NEXT, "free");
-}
-#endif
 
 static int strToUnsignedLongInt(const char* str, unsigned long int* value)
 {
@@ -293,12 +287,17 @@ extern "C" unsigned int deactivateOverthrower()
 
 extern "C" void pauseOverthrower(unsigned int duration)
 {
-    paused = reinterpret_cast<void*>(duration == 0 ? UINT_MAX : duration);
+#if defined(PLATFORM_OS_MAC_OS_X)
+    if (!initialized)
+        initialize();
+#endif
+
+    paused = duration == 0 ? UINT_MAX : duration;
 }
 
 extern "C" void resumeOverthrower()
 {
-    paused = nullptr;
+    paused = 0;
 }
 
 static int isTimeToFail()
@@ -326,8 +325,6 @@ void* nonFailingMalloc(size_t size)
     return malloc(size);
 #elif defined(PLATFORM_OS_LINUX)
     return native_malloc ? native_malloc(size) : malloc(size);
-#else
-#error "Unsupported OS"
 #endif
 }
 
@@ -364,8 +361,6 @@ static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
         is_in_ignore_list = true;
     if (count >= 4 && strstr(symbols[3], "dlerror"))
         is_in_ignore_list = true;
-#else
-#error "Unsupported OS"
 #endif
 
 #if 0
@@ -380,21 +375,24 @@ void* my_malloc(size_t size)
 {
     void* pointer;
 
-#if defined(PLATFORM_OS_LINUX)
-    if (native_malloc == NULL)
-        initialize();
+#if defined(PLATFORM_OS_MAC_OS_X)
+    if (initializing)
+        return nonFailingMalloc(size);
 #endif
+
+    if (!initialized)
+        initialize();
 
     bool is_in_white_list = is_tracing;
     bool is_in_ignore_list = false;
 
     if (!is_tracing) {
-        is_tracing = reinterpret_cast<void*>(-1);
-        const uintptr_t old_paused = reinterpret_cast<uintptr_t>(*paused);
+        is_tracing = true;
+        const unsigned int old_paused = paused;
         pauseOverthrower(0);
         searchKnowledgeBase(is_in_white_list, is_in_ignore_list);
-        paused = reinterpret_cast<void*>(old_paused);
-        is_tracing = nullptr;
+        paused = old_paused;
+        is_tracing = false;
     }
 
     if (!is_in_white_list && activated && !paused && size && isTimeToFail()) {
@@ -411,7 +409,7 @@ void* my_malloc(size_t size)
     }
 
     if (paused)
-        paused = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(*paused) - 1);
+        --paused;
 
     return pointer;
 }

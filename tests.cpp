@@ -7,6 +7,7 @@
 
 #include "overthrower.h"
 #include "platform.h"
+#include "thread_local.h"
 
 #define STRATEGY_RANDOM 0
 #define STRATEGY_STEP 1
@@ -136,6 +137,35 @@ static std::string generateExpectedPattern(unsigned int strategy, unsigned int i
             pattern.push_back('+');
     }
     return pattern;
+}
+
+TEST(ThreadLocal, Boolean)
+{
+    static constexpr unsigned int thread_count = 128;
+
+    std::thread threads[thread_count];
+    ThreadLocal<bool> thread_local_bool;
+
+    auto threadRoutine = [&thread_local_bool]() {
+        EXPECT_FALSE(thread_local_bool);
+        EXPECT_EQ(thread_local_bool, false);
+        for (bool value : { true, false, true }) {
+            thread_local_bool = value;
+            if (value)
+                EXPECT_TRUE(thread_local_bool);
+            else
+                EXPECT_FALSE(thread_local_bool);
+            EXPECT_EQ(thread_local_bool, value);
+        }
+    };
+
+    threadRoutine();
+
+    for (auto& thread : threads)
+        thread = std::thread(threadRoutine);
+
+    for (auto& thread : threads)
+        thread.join();
 }
 
 TEST(FragileCode, WithoutOverthrower)
@@ -467,6 +497,8 @@ TEST(Overthrower, CreatingThreads)
         EXPECT_EQ(deactivateOverthrower(), 0);
     }
 
+    EXPECT_GT(success_count, 0);
+    EXPECT_GT(failure_count, 0);
     EXPECT_GT(failure_count, thread_count);
     EXPECT_EQ(success_count + failure_count, thread_count * (sizeof(duty_cycle_variants) / sizeof(duty_cycle_variants[0])));
 }
