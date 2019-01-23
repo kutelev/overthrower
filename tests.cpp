@@ -294,6 +294,36 @@ TEST(Overthrower, MultipleThreadsShortTermPause)
 }
 #endif
 
+TEST(Overthrower, NestedPause)
+{
+    static constexpr unsigned int max_depth = 14;
+
+    OverthrowerConfiguratorStep overthrower_configurator(0);
+
+    std::function<void(unsigned int)> recursive_function;
+    recursive_function = [&recursive_function](unsigned int depth) {
+        pauseOverthrower(1);
+        fragileCode(1);
+        if (depth < max_depth)
+            recursive_function(depth + 1);
+        resumeOverthrower();
+        pauseOverthrower(2);
+        fragileCode(1);
+        if (depth < max_depth)
+            recursive_function(depth + 1);
+        fragileCode(1);
+        void* buffer = malloc(128);
+        resumeOverthrower();
+        pauseOverthrower(0);
+        ASSERT_EQ(buffer, nullptr);
+        resumeOverthrower();
+    };
+
+    activateOverthrower();
+    recursive_function(0);
+    EXPECT_EQ(deactivateOverthrower(), 0);
+}
+
 TEST(Overthrower, StrategyRandom)
 {
     static const unsigned int duty_cycle_variants[] = { 1, 2, 3, 5, 10, 20, 30, 50, 100 };
