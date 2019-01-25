@@ -223,6 +223,19 @@ TEST(Overthrower, DoubleDeactivation)
     free(buffer);
 }
 
+TEST(Overthrower, Deactivation)
+{
+    OverthrowerConfiguratorStep overthrower_configurator(0);
+    activateOverthrower();
+    pauseOverthrower(0);
+    fragileCode();
+    EXPECT_EQ(deactivateOverthrower(), 0);
+    activateOverthrower();
+    void* buffer = malloc(128);
+    EXPECT_EQ(deactivateOverthrower(), 0);
+    EXPECT_EQ(buffer, nullptr);
+}
+
 TEST(Overthrower, FreePreAllocated)
 {
     void* buffer = malloc(128);

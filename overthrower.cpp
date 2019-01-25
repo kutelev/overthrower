@@ -287,6 +287,7 @@ extern "C" unsigned int deactivateOverthrower()
 
     const unsigned int blocks_leaked = allocated.size();
     allocated.clear();
+    state = {};
     return blocks_leaked;
 }
 
