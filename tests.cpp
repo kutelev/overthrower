@@ -296,7 +296,8 @@ TEST(Overthrower, MultipleThreadsShortTermPause)
 
 TEST(Overthrower, NestedPause)
 {
-    static constexpr unsigned int max_depth = 14;
+    static constexpr unsigned int max_recursive_depth = 4;
+    static constexpr unsigned int max_depth = 16;
 
     OverthrowerConfiguratorStep overthrower_configurator(0);
 
@@ -304,12 +305,12 @@ TEST(Overthrower, NestedPause)
     recursive_function = [&recursive_function](unsigned int depth) {
         pauseOverthrower(1);
         fragileCode(1);
-        if (depth < max_depth)
+        if (depth < max_recursive_depth - 1)
             recursive_function(depth + 1);
         resumeOverthrower();
         pauseOverthrower(2);
         fragileCode(1);
-        if (depth < max_depth)
+        if (depth < max_recursive_depth - 1)
             recursive_function(depth + 1);
         fragileCode(1);
         void* buffer = malloc(128);
@@ -321,7 +322,51 @@ TEST(Overthrower, NestedPause)
 
     activateOverthrower();
     recursive_function(0);
+
+    for (unsigned int i = 0; i < max_depth; ++i) {
+        pauseOverthrower(1);
+    }
+
+    for (unsigned int i = 0; i < max_depth; ++i) {
+        fragileCode(1);
+        resumeOverthrower();
+    }
+
     EXPECT_EQ(deactivateOverthrower(), 0);
+}
+
+TEST(Overthrower, NestedPauseOverflowUnderflow)
+{
+    static constexpr unsigned int max_depth = 128;
+
+    OverthrowerConfiguratorStep overthrower_configurator(0);
+    activateOverthrower();
+
+    for (unsigned int i = 0; i < max_depth; ++i) {
+        pauseOverthrower(1);
+        fragileCode(1);
+    }
+
+    pauseOverthrower(0);
+    fragileCode(1);
+    pauseOverthrower(1);
+    fragileCode(1);
+    void* buffer1 = malloc(128);
+    resumeOverthrower();
+    void* buffer2 = malloc(128);
+    resumeOverthrower();
+
+    for (unsigned int i = 0; i < max_depth * 2; ++i) {
+        resumeOverthrower();
+    }
+
+    pauseOverthrower(1);
+    fragileCode(1);
+    resumeOverthrower();
+
+    EXPECT_EQ(deactivateOverthrower(), 0);
+    EXPECT_EQ(buffer1, nullptr);
+    EXPECT_EQ(buffer2, nullptr);
 }
 
 TEST(Overthrower, StrategyRandom)

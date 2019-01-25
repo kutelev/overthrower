@@ -28,6 +28,7 @@
 #endif
 
 #define MAX_STACK_DEPTH 4
+#define MAX_PAUSE_DEPTH 16
 
 typedef void* (*Malloc)(size_t size);
 typedef void* (*Realloc)(void* pointer, size_t size);
@@ -73,8 +74,6 @@ void nonFailingFree(void* pointer);
 #define MIN_DURATION 1
 #define MAX_DURATION 100
 
-#define MAX_DEPTH 16
-
 static const char* strategy_names[4] = { "random", "step", "pulse", "none" };
 
 static unsigned int activated = 0;
@@ -88,7 +87,7 @@ static unsigned int malloc_seq_num = 0;
 
 struct State {
     bool is_tracing;
-    unsigned int paused[MAX_DEPTH];
+    unsigned int paused[MAX_PAUSE_DEPTH + 1];
     unsigned int depth;
 };
 
@@ -298,11 +297,24 @@ extern "C" void pauseOverthrower(unsigned int duration)
         initialize();
 #endif
 
-    state.paused[++state.depth] = duration == 0 ? UINT_MAX : duration;
+    duration = duration == 0 ? UINT_MAX : duration;
+
+    if (state.depth == MAX_PAUSE_DEPTH) {
+        fprintf(stderr, "pause stack overflow detected.\n");
+        state.paused[MAX_PAUSE_DEPTH] = duration;
+        return;
+    }
+
+    state.paused[++state.depth] = duration;
 }
 
 extern "C" void resumeOverthrower()
 {
+    if (state.depth == 0) {
+        fprintf(stderr, "pause stack underflow detected.\n");
+        return;
+    }
+
     --state.depth;
 }
 
@@ -392,30 +404,32 @@ void* my_malloc(size_t size)
     bool is_in_white_list = state.is_tracing;
     bool is_in_ignore_list = false;
 
+    const unsigned int effective_depth = state.depth > MAX_PAUSE_DEPTH ? MAX_PAUSE_DEPTH : state.depth;
+
     if (!state.is_tracing) {
         state.is_tracing = true;
-        const unsigned int old_paused = state.paused[state.depth];
-        state.paused[state.depth] = UINT_MAX;
+        const unsigned int old_paused = state.paused[effective_depth];
+        state.paused[effective_depth] = UINT_MAX;
         searchKnowledgeBase(is_in_white_list, is_in_ignore_list);
-        state.paused[state.depth] = old_paused;
+        state.paused[effective_depth] = old_paused;
         state.is_tracing = false;
     }
 
-    if (!is_in_white_list && activated && !state.paused[state.depth] && size && isTimeToFail()) {
+    if (!is_in_white_list && activated && !state.paused[effective_depth] && size && isTimeToFail()) {
         errno = ENOMEM;
         return NULL;
     }
 
     pointer = nonFailingMalloc(size);
 
-    if (!is_in_ignore_list && activated && !state.paused[state.depth] && pointer) {
+    if (!is_in_ignore_list && activated && !state.paused[effective_depth] && pointer) {
         std::lock_guard<std::recursive_mutex> lock(mutex);
         malloc_seq_num++;
         allocated.insert({ pointer, { malloc_seq_num, size } });
     }
 
-    if (state.paused[state.depth])
-        --state.paused[state.depth];
+    if (state.paused[effective_depth])
+        --state.paused[effective_depth];
 
     return pointer;
 }
