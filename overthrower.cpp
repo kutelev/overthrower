@@ -76,7 +76,7 @@ void nonFailingFree(void* pointer);
 
 static const char* strategy_names[4] = { "random", "step", "pulse", "none" };
 
-static unsigned int activated = 0;
+static bool activated = false;
 static unsigned int strategy = STRATEGY_RANDOM;
 static unsigned int seed = 0;
 static unsigned int duty_cycle = 1024;
@@ -109,7 +109,6 @@ template<class T>
 class mallocFreeAllocator {
 public:
     typedef size_t size_type;
-    typedef ptrdiff_t difference_type;
     typedef T* pointer;
     typedef const T* const_pointer;
     typedef T& reference;
@@ -121,32 +120,28 @@ public:
         typedef mallocFreeAllocator<U> other;
     };
 
-    mallocFreeAllocator() throw() {}
-    mallocFreeAllocator(const mallocFreeAllocator&) throw() {}
+    mallocFreeAllocator() noexcept = default;
 
     template<class U>
-    mallocFreeAllocator(const mallocFreeAllocator<U>&) throw()
+    explicit mallocFreeAllocator(const mallocFreeAllocator<U>&) noexcept
     {
     }
 
-    ~mallocFreeAllocator() throw() {}
+    ~mallocFreeAllocator() noexcept = default;
 
-    pointer address(reference x) const { return &x; }
-    const_pointer address(const_reference x) const { return &x; }
-
-    pointer allocate(size_type s, void const* = 0)
+    pointer allocate(size_type size)
     {
-        if (0 == s)
-            return NULL;
-        pointer temp = (pointer)nonFailingMalloc(s * sizeof(T));
-        if (temp == NULL)
+        if (!size)
+            return nullptr;
+        auto temp = reinterpret_cast<pointer>(nonFailingMalloc(size * sizeof(T)));
+        if (!temp)
             throw std::bad_alloc();
         return temp;
     }
 
     void deallocate(pointer p, size_type) { nonFailingFree(p); }
-    size_type max_size() const throw() { return std::numeric_limits<size_t>::max() / sizeof(T); }
-    void construct(pointer p, const T& val) { new ((void*)p) T(val); }
+
+    void construct(pointer p, const T& val) { new (reinterpret_cast<void*>(p)) T(val); }
     void destroy(pointer p) { p->~T(); }
 };
 
@@ -157,7 +152,7 @@ extern "C" unsigned int deactivateOverthrower();
 
 static void initialize()
 {
-    assert(initialized == false);
+    assert(!initialized);
 #if defined(PLATFORM_OS_MAC_OS_X)
     initializing = true;
     state = {};
@@ -178,7 +173,7 @@ __attribute__((constructor)) static void banner()
 
 __attribute__((destructor)) static void shutdown()
 {
-    if (activated == 0)
+    if (!activated)
         return;
 
     fprintf(stderr, "overthrower has not been deactivated explicitly, doing it anyway.\n");
@@ -204,7 +199,7 @@ static unsigned int generateRandomValue(const unsigned int min_val, const unsign
 {
     unsigned int value = (min_val + max_val) / 2;
     FILE* file = fopen("/dev/urandom", "rb");
-    if (file != NULL) {
+    if (file) {
         if (fread(&value, 1, sizeof(int), file) != sizeof(int))
             value = (min_val + max_val) / 2;
         fclose(file);
@@ -219,7 +214,7 @@ static unsigned int readValFromEnvVar(const char* env_var_name, unsigned int min
     const char* env_var_val = getenv(env_var_name);
     unsigned long int value;
 
-    if (env_var_val == NULL) {
+    if (!env_var_val) {
         const unsigned int random_value = generateRandomValue(min_val, max_random_val ? max_random_val : max_val);
         fprintf(stderr, "%s environment variable not set. Using a random value (%u).\n", env_var_name, random_value);
         return random_value;
@@ -269,12 +264,12 @@ extern "C" void activateOverthrower()
             fprintf(stderr, "Duration = %u\n", duration);
         }
     }
-    activated = 1;
+    activated = true;
 }
 
 extern "C" unsigned int deactivateOverthrower()
 {
-    activated = 0;
+    activated = false;
 
     fprintf(stderr, "overthrower got deactivation signal.\n");
     fprintf(stderr, "overthrower will not fail allocations anymore.\n");
@@ -285,7 +280,7 @@ extern "C" unsigned int deactivateOverthrower()
             fprintf(stderr, "0x%016" PRIxPTR " - %6d - %6zd\n", (uintptr_t)v.first, v.second.seq_num, v.second.size);
     }
 
-    const unsigned int blocks_leaked = allocated.size();
+    const auto blocks_leaked = static_cast<unsigned int>(allocated.size());
     allocated.clear();
     state = {};
     return blocks_leaked;
@@ -319,22 +314,22 @@ extern "C" void resumeOverthrower()
     --state.depth;
 }
 
-static int isTimeToFail()
+static bool isTimeToFail()
 {
     switch (strategy) {
         case STRATEGY_RANDOM:
-            return ((unsigned int)rand() % duty_cycle == 0) ? 1 : 0;
+            return rand() % duty_cycle == 0;
         case STRATEGY_STEP:
-            return (__sync_add_and_fetch(&malloc_number, 1) > delay) ? 1 : 0;
+            return __sync_add_and_fetch(&malloc_number, 1) > delay;
         case STRATEGY_PULSE: {
-            unsigned int number = __sync_add_and_fetch(&malloc_number, 1);
-            return (number > delay && number <= delay + duration) ? 1 : 0;
+            const unsigned int number = __sync_add_and_fetch(&malloc_number, 1);
+            return number > delay && number <= delay + duration;
         }
         case STRATEGY_NONE:
-            return 0;
+            return false;
         default:
-            assert(0);
-            return 0;
+            assert(false);
+            return false;
     }
 }
 
@@ -361,6 +356,7 @@ static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
     if (!symbols) {
         is_in_white_list = true;
         is_in_ignore_list = true;
+        return;
     }
 
     is_in_white_list = false;
@@ -418,7 +414,7 @@ void* my_malloc(size_t size)
 
     if (!is_in_white_list && activated && !state.paused[effective_depth] && size && isTimeToFail()) {
         errno = ENOMEM;
-        return NULL;
+        return nullptr;
     }
 
     pointer = nonFailingMalloc(size);
@@ -437,8 +433,8 @@ void* my_malloc(size_t size)
 
 void my_free(void* pointer)
 {
-    int old_errno = errno;
-    if (activated != 0 && pointer != NULL) {
+    const int old_errno = errno;
+    if (activated && pointer) {
         std::lock_guard<std::recursive_mutex> lock(mutex);
         allocated.erase(pointer);
     }
@@ -449,22 +445,22 @@ void my_free(void* pointer)
 
 void* my_realloc(void* pointer, size_t size)
 {
-    if (pointer == NULL)
+    if (!pointer)
         return my_malloc(size);
 
-    if (size == 0 && pointer != NULL) {
+    if (!size) {
         my_free(pointer);
-        return NULL;
+        return nullptr;
     }
 
-    if (allocated.count(pointer) == 0)
+    if (!allocated.count(pointer))
         return native_realloc(pointer, size);
 
     const size_t old_size = allocated.at(pointer).size;
     void* new_ptr = my_malloc(size);
 
-    if (new_ptr == NULL)
-        return NULL;
+    if (!new_ptr)
+        return nullptr;
 
     memcpy(new_ptr, pointer, old_size < size ? old_size : size);
     my_free(pointer);

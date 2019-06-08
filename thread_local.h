@@ -13,14 +13,14 @@ public:
     ThreadLocal() { pthread_key_create(&key, nullptr); }
     ~ThreadLocal() { pthread_key_delete(key); }
 
-    void operator=(T value) { set(value); }
+    ThreadLocal& operator=(T value) { set(value); return *this; }
     operator T() const { return get(); }
 
 private:
     void set(const T value) { pthread_setspecific(key, reinterpret_cast<void*>(value)); }
     T get() const { return (T)(pthread_getspecific(key)); }
 
-    pthread_key_t key;
+    pthread_key_t key{};
 };
 
 #endif

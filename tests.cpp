@@ -34,8 +34,8 @@ protected:
 public:
     virtual ~AbstractOverthrowerConfigurator();
 
-    void setEnv(const char* name, unsigned int value) { ASSERT_EQ(setenv(name, std::to_string(value).c_str(), 1), 0); }
-    void unsetEnv(const char* name) { ASSERT_EQ(unsetenv(name), 0); }
+    static void setEnv(const char* name, unsigned int value) { ASSERT_EQ(setenv(name, std::to_string(value).c_str(), 1), 0); }
+    static void unsetEnv(const char* name) { ASSERT_EQ(unsetenv(name), 0); }
 };
 
 AbstractOverthrowerConfigurator::~AbstractOverthrowerConfigurator()
@@ -54,7 +54,7 @@ public:
     {
     }
 
-    OverthrowerConfiguratorRandom(unsigned int duty_cycle)
+    explicit OverthrowerConfiguratorRandom(unsigned int duty_cycle)
     {
         setEnv("OVERTHROWER_STRATEGY", STRATEGY_RANDOM);
         setEnv("OVERTHROWER_SEED", 0);
@@ -65,7 +65,7 @@ public:
 class OverthrowerConfiguratorStep : public AbstractOverthrowerConfigurator {
 public:
     OverthrowerConfiguratorStep() = delete;
-    OverthrowerConfiguratorStep(unsigned int delay)
+    explicit OverthrowerConfiguratorStep(unsigned int delay)
     {
         setEnv("OVERTHROWER_STRATEGY", STRATEGY_STEP);
         setEnv("OVERTHROWER_DELAY", delay);
@@ -403,7 +403,7 @@ TEST(Overthrower, StrategyRandom)
         if (duty_cycle == 1)
             continue;
         std::adjacent_difference(real_pattern.cbegin(), real_pattern.cend(), real_pattern.begin(), std::greater<char>());
-        const unsigned int switch_count = std::accumulate(real_pattern.cbegin() + 1, real_pattern.cend(), 0);
+        const unsigned int switch_count = std::accumulate(real_pattern.cbegin() + 1U, real_pattern.cend(), 0U);
         EXPECT_GE(switch_count, expected_failure_count * 9 / 20);
     }
 }
@@ -516,7 +516,7 @@ TEST(Overthrower, PreservingErrnoWithOverthrower)
 #if defined(PLATFORM_OS_LINUX)
 TEST(Overthrower, ThrowingException)
 {
-    class CustomException {
+    class CustomException : public std::exception {
     public:
         CustomException() = default;
 
