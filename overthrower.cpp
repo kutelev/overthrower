@@ -269,19 +269,25 @@ extern "C" void activateOverthrower()
 extern "C" unsigned int deactivateOverthrower()
 {
     activated = false;
+    state = {};
 
     fprintf(stderr, "overthrower got deactivation signal.\n");
     fprintf(stderr, "overthrower will not fail allocations anymore.\n");
 
-    if (!allocated.empty()) {
-        fprintf(stderr, "overthrower has detected not freed memory blocks with following addresses:\n");
-        for (const auto& v : allocated)
-            fprintf(stderr, "0x%016" PRIxPTR " - %6d - %6zd\n", (uintptr_t)v.first, v.second.seq_num, v.second.size);
-    }
+    if (allocated.empty())
+        return 0;
+
+    fprintf(stderr, "overthrower has detected not freed memory blocks with following addresses:\n");
+    for (const auto& v : allocated)
+        fprintf(stderr, "0x%016" PRIxPTR "  -  %6d  -  %10zd\n", (uintptr_t)v.first, v.second.seq_num, v.second.size);
+
+    fprintf(stderr, "^^^^^^^^^^^^^^^^^^  |  ^^^^^^  |  ^^^^^^^^^^\n");
+    fprintf(stderr, "      pointer       |  malloc  |  block size\n");
+    fprintf(stderr, "                    |invocation|\n");
+    fprintf(stderr, "                    |  number  |\n");
 
     const auto blocks_leaked = static_cast<unsigned int>(allocated.size());
     allocated.clear();
-    state = {};
     return blocks_leaked;
 }
 
@@ -435,9 +441,11 @@ void* my_malloc(size_t size)
 
     try {
         std::lock_guard<std::recursive_mutex> lock(mutex);
+        // Maybe I should have used emplace instead of insert but it is not possible due to incapability of GCC 4.8 dealing with it
         allocated.insert({ pointer, { malloc_seq_num, size } });
     }
     catch (const std::bad_alloc&) {
+        // Seems like we really faced with OOM conditions
         nonFailingFree(pointer);
         return nullptr;
     }
