@@ -193,11 +193,17 @@ TEST(FragileCode, WithOverthrower)
 TEST(Overthrower, MemoryLeak)
 {
     OverthrowerConfiguratorNone overthrower_configurator;
-    activateOverthrower();
-    void* buffer = malloc(128);
-    forced_memset(buffer, 0, 128);
-    EXPECT_EQ(deactivateOverthrower(), 1);
-    free(buffer);
+    for (unsigned int block_count : { 1, 2, 3 }) {
+        void* buffers[3];
+        activateOverthrower();
+        for (unsigned int i = 0; i < block_count; ++i) {
+            buffers[i] = malloc(128);
+            forced_memset(buffers[i], 0, 128);
+        }
+        EXPECT_EQ(deactivateOverthrower(), block_count);
+        for (unsigned int i = 0; i < block_count; ++i)
+            free(buffers[i]);
+    }
 }
 
 TEST(Overthrower, DoubleActivation)

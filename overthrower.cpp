@@ -2,6 +2,7 @@
 #define _GNU_SOURCE
 #endif
 
+#include <atomic>
 #include <cassert>
 #include <cerrno>
 #include <cinttypes>
@@ -82,8 +83,7 @@ static unsigned int seed = 0;
 static unsigned int duty_cycle = 1024;
 static unsigned int delay = MIN_DELAY;
 static unsigned int duration = MIN_DURATION;
-static unsigned int malloc_number = 0;
-static unsigned int malloc_seq_num = 0;
+static std::atomic<unsigned int> malloc_counter{};
 
 struct State {
     bool is_tracing;
@@ -242,8 +242,7 @@ extern "C" void activateOverthrower()
     printf("overthrower have to print useless string to force printf to do all preallocations: %s", tmp_buf);
 #endif
 
-    malloc_number = 0;
-    malloc_seq_num = 0;
+    malloc_counter = 0;
 
     fprintf(stderr, "overthrower got activation signal.\n");
     fprintf(stderr, "overthrower will use following parameters for failing allocations:\n");
@@ -314,17 +313,15 @@ extern "C" void resumeOverthrower()
     --state.depth;
 }
 
-static bool isTimeToFail()
+static bool isTimeToFail(unsigned int malloc_seq_num)
 {
     switch (strategy) {
         case STRATEGY_RANDOM:
             return rand() % duty_cycle == 0;
         case STRATEGY_STEP:
-            return __sync_add_and_fetch(&malloc_number, 1) > delay;
-        case STRATEGY_PULSE: {
-            const unsigned int number = __sync_add_and_fetch(&malloc_number, 1);
-            return number > delay && number <= delay + duration;
-        }
+            return malloc_seq_num >= delay;
+        case STRATEGY_PULSE:
+            return malloc_seq_num > delay && malloc_seq_num <= delay + duration;
         case STRATEGY_NONE:
             return false;
         default:
@@ -388,8 +385,6 @@ static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
 
 void* my_malloc(size_t size)
 {
-    void* pointer;
-
 #if defined(PLATFORM_OS_MAC_OS_X)
     if (initializing)
         return nonFailingMalloc(size);
@@ -398,10 +393,13 @@ void* my_malloc(size_t size)
     if (!initialized)
         initialize();
 
-    bool is_in_white_list = state.is_tracing;
-    bool is_in_ignore_list = false;
+    if (!activated)
+        return nonFailingMalloc(size);
 
     const unsigned int effective_depth = state.depth > MAX_PAUSE_DEPTH ? MAX_PAUSE_DEPTH : state.depth;
+
+    bool is_in_white_list = state.is_tracing;
+    bool is_in_ignore_list = false;
 
     if (!state.is_tracing) {
         state.is_tracing = true;
@@ -412,21 +410,37 @@ void* my_malloc(size_t size)
         state.is_tracing = false;
     }
 
-    if (!is_in_white_list && activated && !state.paused[effective_depth] && size && isTimeToFail()) {
+    if (state.paused[effective_depth]) {
+        --state.paused[effective_depth];
+        return nonFailingMalloc(size);
+    }
+
+    const unsigned int malloc_seq_num = malloc_counter++;
+
+    if (is_in_white_list || !size)
+        return nonFailingMalloc(size);
+
+    if (isTimeToFail(malloc_seq_num)) {
         errno = ENOMEM;
         return nullptr;
     }
 
-    pointer = nonFailingMalloc(size);
+    void* pointer = nonFailingMalloc(size);
 
-    if (!is_in_ignore_list && activated && !state.paused[effective_depth] && pointer) {
+    if (!pointer)
+        return nullptr;
+
+    if (is_in_ignore_list)
+        return pointer;
+
+    try {
         std::lock_guard<std::recursive_mutex> lock(mutex);
-        malloc_seq_num++;
         allocated.insert({ pointer, { malloc_seq_num, size } });
     }
-
-    if (state.paused[effective_depth])
-        --state.paused[effective_depth];
+    catch (const std::bad_alloc&) {
+        nonFailingFree(pointer);
+        return nullptr;
+    }
 
     return pointer;
 }
