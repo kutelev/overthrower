@@ -1,4 +1,5 @@
 #include <atomic>
+#include <mutex>
 #include <numeric>
 #include <thread>
 
@@ -104,16 +105,26 @@ static void fragileCodeWithOverthrower()
     deactivateOverthrower();
 }
 
-static unsigned int failureCounter(unsigned int iterations, std::string& pattern)
+static unsigned int failureCounter(unsigned int iterations,
+                                   std::string& pattern,
+                                   std::atomic<unsigned int>* malloc_seq_num = nullptr,
+                                   std::mutex* mutex = nullptr)
 {
     unsigned int counter = 0;
     for (unsigned int i = 0; i < iterations; ++i) {
+        if (mutex)
+            mutex->lock();
         char* string = strdup("string");
         if (string)
             forced_memset(string, 0, 6);
         else
             ++counter;
-        pattern.push_back(string ? '+' : '-');
+        if (!malloc_seq_num)
+            pattern.push_back(string ? '+' : '-');
+        else
+            pattern[(*malloc_seq_num)++] = string ? '+' : '-';
+        if (mutex)
+            mutex->unlock();
         free(string);
     }
     return counter;
@@ -286,6 +297,7 @@ TEST(Overthrower, SingleThreadShortTermPause)
 }
 
 #if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
+// With Earlier Xcode versions std::thread constructor crashes instead of throwing an exception in OOM conditions
 TEST(Overthrower, MultipleThreadsShortTermPause)
 {
     static constexpr unsigned int thread_count = 128;
@@ -384,69 +396,170 @@ TEST(Overthrower, NestedPauseOverflowUnderflow)
 
 TEST(Overthrower, StrategyRandom)
 {
-    static const unsigned int duty_cycle_variants[] = { 1, 2, 3, 5, 10, 20, 30, 50, 100 };
-    static const unsigned int expected_failure_count = 1000;
+#if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
+    static constexpr unsigned int thread_count_variants[] = { 1, 2, 8 };
+#else
+    static constexpr unsigned int thread_count_variants[] = { 1 };
+#endif
+    static constexpr unsigned int duty_cycle_variants[] = { 1, 2, 3, 5, 10, 20, 30 };
+    static constexpr unsigned int expected_failure_count = 1024;
 
-    std::string real_pattern;
+    for (unsigned int thread_count : thread_count_variants) {
+        for (unsigned int duty_cycle : duty_cycle_variants) {
+            const unsigned int iterations = duty_cycle * expected_failure_count;
+            const unsigned int allowed_delta = duty_cycle == 1 ? 0 : expected_failure_count / 10;
 
-    for (unsigned int duty_cycle : duty_cycle_variants) {
-        const unsigned int iterations = duty_cycle * expected_failure_count;
-        real_pattern.reserve(iterations);
-        real_pattern.resize(0);
-        OverthrowerConfiguratorRandom overthrower_configurator(duty_cycle);
-        activateOverthrower();
-        const unsigned int allowed_delta = duty_cycle == 1 ? 0 : expected_failure_count / 10;
-        const unsigned int real_failure_count = failureCounter(iterations, real_pattern);
-        EXPECT_EQ(deactivateOverthrower(), 0);
-        EXPECT_GE(real_failure_count, expected_failure_count - allowed_delta);
-        EXPECT_LE(real_failure_count, expected_failure_count + allowed_delta);
-        if (duty_cycle == 1)
-            continue;
-        std::adjacent_difference(real_pattern.cbegin(), real_pattern.cend(), real_pattern.begin(), std::greater<char>());
-        const unsigned int switch_count = std::accumulate(real_pattern.cbegin() + 1U, real_pattern.cend(), 0U);
-        EXPECT_GE(switch_count, expected_failure_count * 9 / 20);
+            std::string real_pattern(iterations, '?');
+            std::atomic<unsigned int> real_failure_count{};
+            std::atomic<unsigned int> malloc_seq_num{};
+            std::vector<std::thread> threads;
+            volatile bool start_flag = false;
+
+            OverthrowerConfiguratorRandom overthrower_configurator(duty_cycle);
+
+            if (thread_count == 1) {
+                activateOverthrower();
+                real_failure_count = failureCounter(iterations / thread_count, real_pattern, &malloc_seq_num);
+            }
+            else {
+                for (unsigned int i = 0; i < thread_count; ++i) {
+                    threads.emplace_back(std::thread([&]() {
+                        while (!start_flag) {
+                        }
+                        real_failure_count += failureCounter(iterations / thread_count, real_pattern, &malloc_seq_num);
+                    }));
+                }
+                activateOverthrower();
+                start_flag = true;
+            }
+
+            for (auto& thread : threads)
+                thread.join();
+            threads.clear();
+
+            EXPECT_EQ(deactivateOverthrower(), 0);
+            EXPECT_GE(real_failure_count, expected_failure_count - allowed_delta);
+            EXPECT_LE(real_failure_count, expected_failure_count + allowed_delta);
+            if (duty_cycle == 1)
+                continue;
+            std::adjacent_difference(real_pattern.cbegin(), real_pattern.cend(), real_pattern.begin(), std::greater<char>());
+            const unsigned int switch_count = std::accumulate(real_pattern.cbegin() + 1U, real_pattern.cend(), 0U);
+            EXPECT_GE(switch_count, expected_failure_count * 9 / 20);
+        }
     }
 }
 
 TEST(Overthrower, StrategyStep)
 {
-    static const unsigned int delay_variants[] = { 0, 1, 2, 3, 5 };
-    static const unsigned int iterations = 50;
+#if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
+    static constexpr unsigned int thread_count_variants[] = { 1, 2, 8 };
+#else
+    static constexpr unsigned int thread_count_variants[] = { 1 };
+#endif
+    static constexpr unsigned int delay_variants[] = { 0, 1, 2, 3, 5 };
+    static constexpr unsigned int iterations = 64;
 
-    std::string expected_pattern;
-    std::string real_pattern(iterations, '?');
+    std::mutex mutex;
 
-    for (unsigned int delay : delay_variants) {
-        expected_pattern = generateExpectedPattern(STRATEGY_STEP, iterations, delay);
-        real_pattern.resize(0);
-        OverthrowerConfiguratorStep overthrower_configurator(delay);
-        activateOverthrower();
-        const unsigned int failure_count = failureCounter(iterations, real_pattern);
-        EXPECT_EQ(deactivateOverthrower(), 0);
-        EXPECT_EQ(failure_count, iterations - delay);
-        EXPECT_EQ(real_pattern, expected_pattern);
+    for (bool with_mutex : { true, false }) {
+        for (unsigned int thread_count : thread_count_variants) {
+            if (thread_count == 1)
+                with_mutex = false;
+            for (unsigned int delay : delay_variants) {
+                const std::string expected_pattern = generateExpectedPattern(STRATEGY_STEP, iterations, delay);
+
+                std::string real_pattern(iterations, '?');
+                std::atomic<unsigned int> real_failure_count{};
+                std::atomic<unsigned int> malloc_seq_num{};
+                std::vector<std::thread> threads;
+                volatile bool start_flag = false;
+
+                OverthrowerConfiguratorStep overthrower_configurator(delay);
+
+                if (thread_count == 1) {
+                    activateOverthrower();
+                    real_failure_count = failureCounter(iterations / thread_count, real_pattern, &malloc_seq_num, with_mutex ? &mutex : nullptr);
+                }
+                else {
+                    for (unsigned int i = 0; i < thread_count; ++i) {
+                        threads.emplace_back(std::thread([&]() {
+                            while (!start_flag) {
+                            }
+                            real_failure_count += failureCounter(iterations / thread_count, real_pattern, &malloc_seq_num, with_mutex ? &mutex : nullptr);
+                        }));
+                    }
+                    activateOverthrower();
+                    start_flag = true;
+                }
+
+                for (auto& thread : threads)
+                    thread.join();
+                threads.clear();
+
+                EXPECT_EQ(deactivateOverthrower(), 0);
+                EXPECT_EQ(real_failure_count, iterations - delay);
+                if (with_mutex)
+                    EXPECT_EQ(real_pattern, expected_pattern);
+            }
+        }
     }
 }
 
 TEST(Overthrower, StrategyPulse)
 {
-    static const unsigned int delay_variants[] = { 1, 2, 3, 5 };
-    static const unsigned int duration_variants[] = { 1, 2, 3, 5 };
-    static const unsigned int iterations = 50;
+#if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
+    static constexpr unsigned int thread_count_variants[] = { 1, 2, 8 };
+#else
+    static constexpr unsigned int thread_count_variants[] = { 1 };
+#endif
+    static constexpr unsigned int delay_variants[] = { 1, 2, 3, 5 };
+    static constexpr unsigned int duration_variants[] = { 1, 2, 3, 5 };
+    static constexpr unsigned int iterations = 64;
 
-    std::string expected_pattern;
-    std::string real_pattern(iterations, '?');
+    std::mutex mutex;
 
-    for (unsigned int delay : delay_variants) {
-        for (unsigned int duration : duration_variants) {
-            expected_pattern = generateExpectedPattern(STRATEGY_PULSE, iterations, delay, duration);
-            real_pattern.resize(0);
-            OverthrowerConfiguratorPulse overthrower_configurator(delay, duration);
-            activateOverthrower();
-            const unsigned int failure_count = failureCounter(iterations, real_pattern);
-            EXPECT_EQ(deactivateOverthrower(), 0);
-            EXPECT_EQ(failure_count, duration);
-            EXPECT_EQ(real_pattern, expected_pattern);
+    for (bool with_mutex : { true, false }) {
+        for (unsigned int thread_count : thread_count_variants) {
+            if (thread_count == 1)
+                with_mutex = false;
+            for (unsigned int delay : delay_variants) {
+                for (unsigned int duration : duration_variants) {
+                    const std::string expected_pattern = generateExpectedPattern(STRATEGY_PULSE, iterations, delay, duration);
+
+                    std::string real_pattern(iterations, '?');
+                    std::atomic<unsigned int> real_failure_count{};
+                    std::atomic<unsigned int> malloc_seq_num{};
+                    std::vector<std::thread> threads;
+                    volatile bool start_flag = false;
+
+                    OverthrowerConfiguratorPulse overthrower_configurator(delay, duration);
+
+                    if (thread_count == 1) {
+                        activateOverthrower();
+                        real_failure_count = failureCounter(iterations / thread_count, real_pattern, &malloc_seq_num, with_mutex ? &mutex : nullptr);
+                    }
+                    else {
+                        for (unsigned int i = 0; i < thread_count; ++i) {
+                            threads.emplace_back(std::thread([&]() {
+                                while (!start_flag) {
+                                }
+                                real_failure_count += failureCounter(iterations / thread_count, real_pattern, &malloc_seq_num, with_mutex ? &mutex : nullptr);
+                            }));
+                        }
+                        activateOverthrower();
+                        start_flag = true;
+                    }
+
+                    for (auto& thread : threads)
+                        thread.join();
+                    threads.clear();
+
+                    EXPECT_EQ(deactivateOverthrower(), 0);
+                    EXPECT_EQ(real_failure_count, duration);
+                    if (with_mutex)
+                        EXPECT_EQ(real_pattern, expected_pattern);
+                }
+            }
         }
     }
 }
@@ -545,6 +658,7 @@ TEST(Overthrower, ThrowingException)
 #endif
 
 #if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
+// With Earlier Xcode versions std::thread constructor crashes instead of throwing an exception in OOM conditions
 TEST(Overthrower, CreatingThreads)
 {
     static const unsigned int duty_cycle_variants[] = { 1, 2, 3, 5, 10, 20, 30, 50, 100 };
