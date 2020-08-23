@@ -27,11 +27,10 @@ matrix:
       dist: focal
     - os: linux
       dist: focal
+      compiler: clang
       env:
         - MEASURE_COVERAGE=1
         - OVERTHROWER_LIBRARY_PATH=./liboverthrower.so
-        - CC=clang
-        - CXX=clang++
         - LLVM_PROFDATA=llvm-profdata
         - LLVM_COV=llvm-cov
         - CMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping"
