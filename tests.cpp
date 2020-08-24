@@ -3,8 +3,7 @@
 #include <numeric>
 #include <thread>
 
-#include <src/gmock-all.cc>
-#include <src/gtest-all.cc>
+#include <gtest/gtest.h>
 
 #include "overthrower.h"
 #include "platform.h"
@@ -24,7 +23,7 @@ GTEST_API_ int main(int argc, char** argv)
         return EXIT_FAILURE;
     }
 
-    testing::InitGoogleMock(&argc, argv);
+    testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
 
@@ -400,6 +399,45 @@ TEST(Overthrower, NestedPauseOverflowUnderflow)
     EXPECT_EQ(buffer2, nullptr);
 }
 
+TEST(Overthrower, RandomParameters)
+{
+    constexpr unsigned int iteration_count = 128U;
+    constexpr unsigned int allocation_count = 16384U;
+    unsigned int strategy_random_chosen_times = 0U;
+    unsigned int strategy_random_step_times = 0U;
+    unsigned int strategy_random_pulse_times = 0U;
+
+    for (unsigned int i = 0; i < iteration_count; ++i) {
+        std::string real_pattern;
+        real_pattern.reserve(allocation_count);
+
+        activateOverthrower();
+        failureCounter(allocation_count, real_pattern);
+        EXPECT_EQ(deactivateOverthrower(), 0U);
+
+        std::adjacent_difference(real_pattern.cbegin(), real_pattern.cend(), real_pattern.begin(), std::not_equal_to<char>());
+        const unsigned int switch_count = std::accumulate(real_pattern.cbegin() + 1U, real_pattern.cend(), 0U);
+
+        EXPECT_GT(switch_count, 0U);
+
+        if (switch_count == 1) {
+            ++strategy_random_step_times;
+        }
+        else if (switch_count == 2) {
+            ++strategy_random_pulse_times;
+        }
+        else if (switch_count > 2) {
+            ++strategy_random_chosen_times;
+        }
+        if (strategy_random_chosen_times && strategy_random_step_times && strategy_random_pulse_times)
+            break;
+    }
+
+    EXPECT_GT(strategy_random_chosen_times, 0U);
+    EXPECT_GT(strategy_random_step_times, 0U);
+    EXPECT_GT(strategy_random_pulse_times, 0U);
+}
+
 TEST(Overthrower, StrategyRandom)
 {
 #if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
@@ -448,9 +486,10 @@ TEST(Overthrower, StrategyRandom)
             EXPECT_LE(real_failure_count, expected_failure_count + allowed_delta);
             if (duty_cycle == 1)
                 continue;
-            std::adjacent_difference(real_pattern.cbegin(), real_pattern.cend(), real_pattern.begin(), std::greater<char>());
+            std::adjacent_difference(real_pattern.cbegin(), real_pattern.cend(), real_pattern.begin(), std::not_equal_to<char>());
             const unsigned int switch_count = std::accumulate(real_pattern.cbegin() + 1U, real_pattern.cend(), 0U);
-            EXPECT_GE(switch_count, expected_failure_count * 9 / 20);
+            EXPECT_GE(switch_count, expected_failure_count * 9 / 10);
+            EXPECT_LE(switch_count, expected_failure_count * 11 / 5);
         }
     }
 }
