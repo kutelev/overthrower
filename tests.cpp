@@ -34,7 +34,8 @@ protected:
 public:
     virtual ~AbstractOverthrowerConfigurator();
 
-    static void setEnv(const char* name, unsigned int value) { ASSERT_EQ(setenv(name, std::to_string(value).c_str(), 1), 0); }
+    static void setEnv(const char* name, const char* value) { ASSERT_EQ(setenv(name, value, 1), 0); }
+    static void setEnv(const char* name, int value) { ASSERT_EQ(setenv(name, std::to_string(value).c_str(), 1), 0); }
     static void unsetEnv(const char* name) { ASSERT_EQ(unsetenv(name), 0); }
 };
 
@@ -86,6 +87,30 @@ public:
 class OverthrowerConfiguratorNone : public AbstractOverthrowerConfigurator {
 public:
     OverthrowerConfiguratorNone() { setEnv("OVERTHROWER_STRATEGY", STRATEGY_NONE); }
+};
+
+class OverthrowerRandomParameters : public AbstractOverthrowerConfigurator {
+public:
+    OverthrowerRandomParameters()
+    {
+        for (const char* name : { "OVERTHROWER_STRATEGY", "OVERTHROWER_SEED", "OVERTHROWER_DUTY_CYCLE", "OVERTHROWER_DELAY", "OVERTHROWER_DURATION" }) {
+            setParameterToInvalidValue(name);
+        }
+    }
+
+protected:
+    void setParameterToInvalidValue(const char* name)
+    {
+        if ((rand() % 4) != 0) {
+            return;
+        }
+        if ((rand() % 2) == 0) {
+            setEnv(name, "123456789012345678901234567890"); // Enormously big value which will never fit into integer value.
+        }
+        else {
+            setEnv(name, "not_a_number"); // Invalid value which can not be converted to integer at all.
+        }
+    }
 };
 
 static void fragileCode(unsigned int iterations = 100500)
@@ -402,7 +427,7 @@ TEST(Overthrower, NestedPauseOverflowUnderflow)
 TEST(Overthrower, RandomParameters)
 {
     constexpr unsigned int iteration_count = 128U;
-    constexpr unsigned int allocation_count = 16384U;
+    constexpr unsigned int allocation_count = 65536U;
     unsigned int strategy_random_chosen_times = 0U;
     unsigned int strategy_random_step_times = 0U;
     unsigned int strategy_random_pulse_times = 0U;
@@ -410,6 +435,8 @@ TEST(Overthrower, RandomParameters)
     for (unsigned int i = 0; i < iteration_count; ++i) {
         std::string real_pattern;
         real_pattern.reserve(allocation_count);
+
+        OverthrowerRandomParameters overthrower_configurator;
 
         activateOverthrower();
         failureCounter(allocation_count, real_pattern);
@@ -420,16 +447,16 @@ TEST(Overthrower, RandomParameters)
 
         EXPECT_GT(switch_count, 0U);
 
-        if (switch_count == 1) {
+        if (switch_count == 1U) {
             ++strategy_random_step_times;
         }
-        else if (switch_count == 2) {
+        else if (switch_count == 2U) {
             ++strategy_random_pulse_times;
         }
-        else if (switch_count > 2) {
+        else if (switch_count > 2U) {
             ++strategy_random_chosen_times;
         }
-        if (strategy_random_chosen_times && strategy_random_step_times && strategy_random_pulse_times)
+        if (strategy_random_chosen_times >= 4U && strategy_random_step_times >= 4U && strategy_random_pulse_times >= 4U)
             break;
     }
 
