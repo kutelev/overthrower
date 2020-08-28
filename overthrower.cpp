@@ -442,18 +442,20 @@ void* my_malloc(size_t size)
         return nullptr;
     }
 
-    if (is_in_ignore_list)
-        return pointer;
-
-    try {
-        std::lock_guard<std::recursive_mutex> lock(mutex);
-        // Maybe I should have used emplace instead of insert but it is not possible due to incapability of GCC 4.8 dealing with it
-        allocated.insert({ pointer, { malloc_seq_num, size } });
-    }
-    catch (const std::bad_alloc&) {
-        // Real OOM, in this case overthrower itself is being overthrown by an OS.
-        nonFailingFree(pointer);
-        return nullptr;
+    // is_in_ignore_list is never true alone on macOS that is why we do not use return ASAP approach at this place.
+    if (!is_in_ignore_list) {
+        // Register all allocations which are not in the ignore list.
+        // All registered and not freed memory blocks are considered to be memory leaks.
+        try {
+            std::lock_guard<std::recursive_mutex> lock(mutex);
+            // Maybe I should have used emplace instead of insert but it is not possible due to incapability of GCC 4.8 dealing with it
+            allocated.insert({ pointer, { malloc_seq_num, size } });
+        }
+        catch (const std::bad_alloc&) {
+            // Real OOM, in this case overthrower itself is being overthrown by an OS.
+            nonFailingFree(pointer);
+            return nullptr;
+        }
     }
 
     return pointer;
