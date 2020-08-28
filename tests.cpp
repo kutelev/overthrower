@@ -936,11 +936,39 @@ TEST(Overthrower, PureC)
 
 TEST(Overthrower, ImplicitDeactivation)
 {
-    auto activate = []() {
+    auto subprocess = []() {
         OverthrowerConfiguratorNone overthrower_configurator;
         activateOverthrower();
         exit(1);
     };
 
-    EXPECT_EXIT(activate(), ::testing::ExitedWithCode(1), "");
+    EXPECT_EXIT(subprocess(), ::testing::ExitedWithCode(1), "");
+}
+
+extern "C" int __cxa_atexit(void (*func)(void*), void* arg, void* d);
+extern void* __dso_handle;
+
+static void exitFunction(void*)
+{
+    static std::atomic<unsigned int> counter{};
+    if (++counter == 64) {
+        // This function is expected to be invoked exactly 64 times.
+        // If it is not we are dealing with an error.
+        fprintf(stderr, "Exiting ...\n");
+    }
+}
+
+TEST(Overthrower, AtExit)
+{
+    auto subprocess = []() {
+        OverthrowerConfiguratorStep overthrower_configurator(0);
+        activateOverthrower();
+        // __cxa_atexit start allocating after it is invoked dozens of times. Invoke this 64 times.
+        for (int i = 0; i < 64; ++i) {
+            __cxa_atexit(exitFunction, nullptr, __dso_handle);
+        }
+        exit(static_cast<int>(deactivateOverthrower()));
+    };
+
+    EXPECT_EXIT(subprocess(), ::testing::ExitedWithCode(0), "Exiting ...");
 }

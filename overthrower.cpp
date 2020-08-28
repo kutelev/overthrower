@@ -368,6 +368,10 @@ static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
 #if defined(PLATFORM_OS_MAC_OS_X)
     if (count >= 4 && (strstr(symbols[3], "__cxa_allocate_exception") || strstr(symbols[2], "__cxa_allocate_exception")))
         is_in_white_list = true;
+
+    // __cxa_atexit is not supposed to be used explicitly but overthrower needs to be aware of existence of this function:
+    // Allocations which come from __cxa_atexit shall not be failed by overthrower.
+    // Memory which is allocated by __cxa_atexit shall not be treated as memory leak.
     if (count >= 4 && (strstr(symbols[3], "__cxa_atexit") || strstr(symbols[2], "__cxa_atexit"))) {
         is_in_white_list = true;
         is_in_ignore_list = true;
