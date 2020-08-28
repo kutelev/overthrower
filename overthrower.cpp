@@ -406,22 +406,23 @@ void* my_malloc(size_t size)
     if (!activated)
         return nonFailingMalloc(size);
 
-    const unsigned int effective_depth = state.depth > MAX_PAUSE_DEPTH ? MAX_PAUSE_DEPTH : state.depth;
+    const unsigned int depth = state.depth;
+    assert(depth <= MAX_PAUSE_DEPTH);
 
     bool is_in_white_list = state.is_tracing;
     bool is_in_ignore_list = false;
 
     if (!state.is_tracing) {
         state.is_tracing = true;
-        const unsigned int old_paused = state.paused[effective_depth];
-        state.paused[effective_depth] = UINT_MAX;
+        const unsigned int old_paused = state.paused[depth];
+        state.paused[depth] = UINT_MAX;
         searchKnowledgeBase(is_in_white_list, is_in_ignore_list);
-        state.paused[effective_depth] = old_paused;
+        state.paused[depth] = old_paused;
         state.is_tracing = false;
     }
 
-    if (state.paused[effective_depth]) {
-        --state.paused[effective_depth];
+    if (state.paused[depth]) {
+        --state.paused[depth];
         return nonFailingMalloc(size);
     }
 
