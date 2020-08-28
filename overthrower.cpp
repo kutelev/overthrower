@@ -493,11 +493,14 @@ void* my_realloc(void* pointer, size_t size)
 }
 
 #if defined(PLATFORM_OS_MAC_OS_X)
-typedef struct interpose_s {
+struct interpose_t {
     void* substitute;
     void* original;
-} interpose_t;
+};
 
-__attribute__((used)) static const interpose_t interposing_functions[] __attribute__((
-    section("__DATA, __interpose"))) = { { (void*)my_malloc, (void*)malloc }, { (void*)my_realloc, (void*)realloc }, { (void*)my_free, (void*)free } };
+__attribute__((used)) static const interpose_t interposing_functions[] __attribute__((section("__DATA, __interpose"))) = {
+    { reinterpret_cast<void*>(my_malloc), reinterpret_cast<void*>(malloc) },   //
+    { reinterpret_cast<void*>(my_realloc), reinterpret_cast<void*>(realloc) }, //
+    { reinterpret_cast<void*>(my_free), reinterpret_cast<void*>(free) },       //
+};
 #endif
