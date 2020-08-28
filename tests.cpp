@@ -933,3 +933,14 @@ TEST(Overthrower, PureC)
     OverthrowerConfiguratorStep overthrower_configurator(0);
     ASSERT_EQ(somePureCFunction(), nullptr);
 }
+
+TEST(Overthrower, ImplicitDeactivation)
+{
+    auto activate = []() {
+        OverthrowerConfiguratorNone overthrower_configurator;
+        activateOverthrower();
+        exit(1);
+    };
+
+    EXPECT_EXIT(activate(), ::testing::ExitedWithCode(1), "");
+}
