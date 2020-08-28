@@ -853,6 +853,52 @@ TEST(Overthrower, ReallocDeallocateWithOverthrower)
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
 
+TEST(Overthrower, ReallocGrowShrink)
+{
+    constexpr unsigned int iteration_count = 128;
+    constexpr size_t min_size = 128;
+    constexpr size_t max_size = 1024;
+
+    size_t prev_size = min_size + (rand() % (max_size - min_size + 1));
+
+    std::vector<uint8_t> data(max_size);
+    std::generate_n(data.begin(), prev_size, []() { return rand() % 256; });
+
+    OverthrowerConfiguratorRandom overthrower_configurator(2);
+    activateOverthrower();
+
+    pauseOverthrower(1);
+    void* buffer = malloc(prev_size);
+    resumeOverthrower();
+    memcpy(buffer, &data[0], prev_size);
+
+    for (unsigned int i = 0; i < iteration_count; ++i) {
+        const size_t new_size = min_size + (rand() % (max_size - min_size + 1));
+        void* new_buffer = realloc(buffer, new_size);
+        if (!new_buffer) {
+            pauseOverthrower(0);
+            EXPECT_EQ(memcmp(buffer, &data[0], prev_size), 0);
+            resumeOverthrower();
+            continue;
+        }
+
+        pauseOverthrower(0);
+        EXPECT_EQ(memcmp(new_buffer, &data[0], std::min(prev_size, new_size)), 0);
+        resumeOverthrower();
+
+        std::generate_n(data.begin(), new_size, []() { return rand() % 256; });
+        memcpy(new_buffer, &data[0], new_size);
+
+        prev_size = new_size;
+        buffer = new_buffer;
+    }
+
+    ASSERT_NE(buffer, nullptr);
+    free(buffer);
+
+    EXPECT_EQ(deactivateOverthrower(), 0);
+}
+
 extern "C" void* somePureCFunction();
 
 TEST(Overthrower, PureC)

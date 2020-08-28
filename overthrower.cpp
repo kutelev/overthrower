@@ -2,6 +2,7 @@
 #define _GNU_SOURCE
 #endif
 
+#include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <cerrno>
@@ -231,9 +232,8 @@ static unsigned int readValFromEnvVar(const char* env_var_name, unsigned int min
 extern "C" void activateOverthrower()
 {
 #if defined(PLATFORM_OS_MAC_OS_X)
-    // Mac OS X implementation uses malloc inside printf.
-    // To prevent crashes we have to force printf to do all his allocations before
-    // we activated the overthrower.
+    // Mac OS X implementation uses malloc inside printf generation of functions. If malloc fail, printf-like functions may crash.
+    // To prevent crashes we have to force printf to do all his allocations before we activate the overthrower.
     static const int integer_number = 22708089;
     static const double floating_point_number = 22708089.862725008;
     char tmp_buf[1024];
@@ -433,8 +433,10 @@ void* my_malloc(size_t size)
 
     void* pointer = nonFailingMalloc(size);
 
-    if (!pointer)
+    if (!pointer) {
+        // Real OOM, in this case overthrower itself is being overthrown by an OS.
         return nullptr;
+    }
 
     if (is_in_ignore_list)
         return pointer;
@@ -445,7 +447,7 @@ void* my_malloc(size_t size)
         allocated.insert({ pointer, { malloc_seq_num, size } });
     }
     catch (const std::bad_alloc&) {
-        // Seems like we really faced with OOM conditions
+        // Real OOM, in this case overthrower itself is being overthrown by an OS.
         nonFailingFree(pointer);
         return nullptr;
     }
@@ -484,7 +486,7 @@ void* my_realloc(void* pointer, size_t size)
     if (!new_ptr)
         return nullptr;
 
-    memcpy(new_ptr, pointer, old_size < size ? old_size : size);
+    memcpy(new_ptr, pointer, std::min(old_size, size));
     my_free(pointer);
 
     return new_ptr;
