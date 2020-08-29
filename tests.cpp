@@ -696,7 +696,6 @@ TEST(Overthrower, PreservingErrnoWithOverthrower)
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
 
-#if defined(PLATFORM_OS_LINUX)
 TEST(Overthrower, ThrowingException)
 {
     class CustomException : public std::exception {
@@ -725,7 +724,6 @@ TEST(Overthrower, ThrowingException)
 
     EXPECT_GE(failure_count, iterations / 4);
 }
-#endif
 
 #if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
 // With Earlier Xcode versions std::thread constructor crashes instead of throwing an exception in OOM conditions
