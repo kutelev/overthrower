@@ -9,10 +9,10 @@
 #include "platform.h"
 #include "thread_local.h"
 
-#define STRATEGY_RANDOM 0
-#define STRATEGY_STEP 1
-#define STRATEGY_PULSE 2
-#define STRATEGY_NONE 3
+#define STRATEGY_RANDOM 0U
+#define STRATEGY_STEP 1U
+#define STRATEGY_PULSE 2U
+#define STRATEGY_NONE 3U
 
 static void* (*volatile forced_memset)(void*, int, size_t) = memset;
 
@@ -35,17 +35,15 @@ public:
     virtual ~AbstractOverthrowerConfigurator();
 
     static void setEnv(const char* name, const char* value) { ASSERT_EQ(setenv(name, value, 1), 0); }
-    static void setEnv(const char* name, int value) { ASSERT_EQ(setenv(name, std::to_string(value).c_str(), 1), 0); }
+    static void setEnv(const char* name, unsigned int value) { ASSERT_EQ(setenv(name, std::to_string(value).c_str(), 1), 0); }
     static void unsetEnv(const char* name) { ASSERT_EQ(unsetenv(name), 0); }
 };
 
 AbstractOverthrowerConfigurator::~AbstractOverthrowerConfigurator()
 {
-    unsetEnv("OVERTHROWER_STRATEGY");
-    unsetEnv("OVERTHROWER_SEED");
-    unsetEnv("OVERTHROWER_DUTY_CYCLE");
-    unsetEnv("OVERTHROWER_DELAY");
-    unsetEnv("OVERTHROWER_DURATION");
+    for (const char* name : { "OVERTHROWER_STRATEGY", "OVERTHROWER_SEED", "OVERTHROWER_DUTY_CYCLE", "OVERTHROWER_DELAY", "OVERTHROWER_DURATION" }) {
+        unsetEnv(name);
+    }
 }
 
 class OverthrowerConfiguratorRandom : public AbstractOverthrowerConfigurator {
@@ -58,7 +56,7 @@ public:
     explicit OverthrowerConfiguratorRandom(unsigned int duty_cycle)
     {
         setEnv("OVERTHROWER_STRATEGY", STRATEGY_RANDOM);
-        setEnv("OVERTHROWER_SEED", 0);
+        setEnv("OVERTHROWER_SEED", 0U);
         setEnv("OVERTHROWER_DUTY_CYCLE", duty_cycle);
     }
 };
@@ -99,7 +97,7 @@ public:
     }
 
 protected:
-    void setParameterToInvalidValue(const char* name)
+    static void setParameterToInvalidValue(const char* name)
     {
         if ((rand() % 4) != 0) {
             return;
@@ -942,7 +940,7 @@ TEST(Overthrower, ImplicitDeactivation)
         exit(1);
     };
 
-    EXPECT_EXIT(subprocess(), ::testing::ExitedWithCode(1), "");
+    EXPECT_EXIT(subprocess(), ::testing::ExitedWithCode(1), "overthrower has not been deactivated explicitly, doing it anyway.");
 }
 
 extern "C" int __cxa_atexit(void (*func)(void*), void* arg, void* d);

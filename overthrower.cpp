@@ -166,13 +166,13 @@ static void initialize()
     initialized = true;
 }
 
-__attribute__((constructor)) static void banner()
+__attribute__((constructor, used)) static void banner()
 {
     fprintf(stderr, "overthrower is waiting for the activation signal ...\n");
     fprintf(stderr, "Invoke activateOverthrower and overthrower will start his job.\n");
 }
 
-__attribute__((destructor)) static void shutdown()
+__attribute__((destructor, used)) static void shutdown()
 {
     if (!activated)
         return;
