@@ -702,7 +702,7 @@ TEST(Overthrower, ThrowingException)
     public:
         CustomException() = default;
 
-        char placeholder[16384];
+        char placeholder[262144];
     };
 
     static const unsigned int iterations = 5000;
