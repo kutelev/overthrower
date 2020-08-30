@@ -1,7 +1,7 @@
 language: cpp
 
 script:
-- ./test.sh
+  - ./test.sh
 
 env:
   - MEASURE_COVERAGE=1
