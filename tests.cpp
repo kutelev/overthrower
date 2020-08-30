@@ -425,6 +425,23 @@ TEST(Overthrower, NestedPauseOverflowUnderflow)
     EXPECT_EQ(buffer2, nullptr);
 }
 
+TEST(Overthrower, PauseNotActivated)
+{
+    for (unsigned int i = 0U; i < 32U; ++i) {
+        pauseOverthrower(1U);
+    }
+
+    std::thread thread = std::thread([]() {
+        for (unsigned int i = 0U; i < 32U; ++i) {
+            pauseOverthrower(1U);
+        }
+    });
+
+    fragileCode();
+
+    thread.join();
+}
+
 TEST(Overthrower, RandomParameters)
 {
     constexpr unsigned int iteration_count = 128U;
