@@ -3,6 +3,7 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cassert>
 #include <cerrno>
@@ -79,16 +80,16 @@ void nonFailingFree(void* pointer);
 #define MIN_DURATION 1
 #define MAX_DURATION 100
 
-static const char* strategy_names[4] = { "random", "step", "pulse", "none" };
+static std::array<const char*, 4> g_strategy_names{ "random", "step", "pulse", "none" };
 
-static bool activated = false;
-static bool self_overthrow = false;
-static unsigned int strategy = STRATEGY_RANDOM;
-static unsigned int seed = 0;
-static unsigned int duty_cycle = 1024;
-static unsigned int delay = MIN_DELAY;
-static unsigned int duration = MIN_DURATION;
-static std::atomic<unsigned int> malloc_counter{};
+static bool g_activated = false;
+static bool g_self_overthrow = false;
+static unsigned int g_strategy = STRATEGY_RANDOM;
+static unsigned int g_seed = 0;
+static unsigned int g_duty_cycle = 1024;
+static unsigned int g_delay = MIN_DELAY;
+static unsigned int g_duration = MIN_DURATION;
+static std::atomic<unsigned int> g_malloc_counter{};
 
 struct State {
     bool is_tracing;
@@ -96,13 +97,13 @@ struct State {
     unsigned int depth;
 };
 
-static thread_local State state{};
+static thread_local State g_state{};
 
 #if defined(PLATFORM_OS_MAC_OS_X)
-static ThreadLocal<bool> initialized;  // NOLINT
-static ThreadLocal<bool> initializing; // NOLINT
+static ThreadLocal<bool> g_initialized;  // NOLINT
+static ThreadLocal<bool> g_initializing; // NOLINT
 #elif defined(PLATFORM_OS_LINUX)
-static bool initialized;
+static bool g_initialized;
 #endif
 
 struct Info {
@@ -150,24 +151,24 @@ public:
     void destroy(pointer p) { p->~T(); }
 };
 
-static std::recursive_mutex mutex;                                                                                                           // NOLINT
-static std::unordered_map<void*, Info, std::hash<void*>, std::equal_to<void*>, mallocFreeAllocator<std::pair<void* const, Info>>> allocated; // NOLINT
+static std::recursive_mutex g_mutex;                                                                                                           // NOLINT
+static std::unordered_map<void*, Info, std::hash<void*>, std::equal_to<void*>, mallocFreeAllocator<std::pair<void* const, Info>>> g_allocated; // NOLINT
 
 extern "C" unsigned int deactivateOverthrower();
 
 static void initialize()
 {
-    assert(!initialized);
+    assert(!g_initialized);
 #if defined(PLATFORM_OS_MAC_OS_X)
-    initializing = true;
-    state = {};
-    initializing = false;
+    g_initializing = true;
+    g_state = {};
+    g_initializing = false;
 #elif defined(PLATFORM_OS_LINUX)
     native_malloc = reinterpret_cast<decltype(native_malloc)>(dlsym(RTLD_NEXT, "malloc"));
     native_realloc = reinterpret_cast<decltype(native_realloc)>(dlsym(RTLD_NEXT, "realloc"));
     native_free = reinterpret_cast<decltype(native_free)>(dlsym(RTLD_NEXT, "free"));
 #endif
-    initialized = true;
+    g_initialized = true;
 }
 
 __attribute__((constructor, used)) static void banner()
@@ -178,7 +179,7 @@ __attribute__((constructor, used)) static void banner()
 
 __attribute__((destructor, used)) static void shutdown()
 {
-    if (!activated)
+    if (!g_activated)
         return;
 
     fprintf(stderr, "overthrower has not been deactivated explicitly, doing it anyway.\n");
@@ -246,45 +247,45 @@ extern "C" void activateOverthrower()
     printf("overthrower have to print useless string to force printf to do all preallocations: %s", tmp_buf);
 #endif
 
-    malloc_counter = 0;
+    g_malloc_counter = 0;
 
     fprintf(stderr, "overthrower got activation signal.\n");
     fprintf(stderr, "overthrower will use following parameters for failing allocations:\n");
-    strategy = readValFromEnvVar("OVERTHROWER_STRATEGY", STRATEGY_RANDOM, STRATEGY_NONE, STRATEGY_PULSE);
-    fprintf(stderr, "Strategy = %s\n", strategy_names[strategy]);
-    if (strategy == STRATEGY_RANDOM) {
-        seed = readValFromEnvVar("OVERTHROWER_SEED", 0, UINT_MAX);
-        duty_cycle = readValFromEnvVar("OVERTHROWER_DUTY_CYCLE", MIN_DUTY_CYCLE, MAX_DUTY_CYCLE);
-        srand(seed);
-        fprintf(stderr, "Duty cycle = %u\n", duty_cycle);
-        fprintf(stderr, "Seed = %u\n", seed);
+    g_strategy = readValFromEnvVar("OVERTHROWER_STRATEGY", STRATEGY_RANDOM, STRATEGY_NONE, STRATEGY_PULSE);
+    fprintf(stderr, "Strategy = %s\n", g_strategy_names[g_strategy]);
+    if (g_strategy == STRATEGY_RANDOM) {
+        g_seed = readValFromEnvVar("OVERTHROWER_SEED", 0, UINT_MAX);
+        g_duty_cycle = readValFromEnvVar("OVERTHROWER_DUTY_CYCLE", MIN_DUTY_CYCLE, MAX_DUTY_CYCLE);
+        srand(g_seed);
+        fprintf(stderr, "Duty cycle = %u\n", g_duty_cycle);
+        fprintf(stderr, "Seed = %u\n", g_seed);
     }
-    else if (strategy != STRATEGY_NONE) {
-        delay = readValFromEnvVar("OVERTHROWER_DELAY", MIN_DELAY, MAX_DELAY, MAX_RANDOM_DELAY);
-        fprintf(stderr, "Delay = %u\n", delay);
-        if (strategy == STRATEGY_PULSE) {
-            duration = readValFromEnvVar("OVERTHROWER_DURATION", MIN_DURATION, MAX_DURATION);
-            fprintf(stderr, "Duration = %u\n", duration);
+    else if (g_strategy != STRATEGY_NONE) {
+        g_delay = readValFromEnvVar("OVERTHROWER_DELAY", MIN_DELAY, MAX_DELAY, MAX_RANDOM_DELAY);
+        fprintf(stderr, "Delay = %u\n", g_delay);
+        if (g_strategy == STRATEGY_PULSE) {
+            g_duration = readValFromEnvVar("OVERTHROWER_DURATION", MIN_DURATION, MAX_DURATION);
+            fprintf(stderr, "Duration = %u\n", g_duration);
         }
     }
-    self_overthrow = getenv("OVERTHROWER_SELF_OVERTHROW") != nullptr;
-    activated = true;
+    g_self_overthrow = getenv("OVERTHROWER_SELF_OVERTHROW") != nullptr;
+    g_activated = true;
 }
 
 extern "C" unsigned int deactivateOverthrower()
 {
-    self_overthrow = false;
-    activated = false;
-    state = {};
+    g_self_overthrow = false;
+    g_activated = false;
+    g_state = {};
 
     fprintf(stderr, "overthrower got deactivation signal.\n");
     fprintf(stderr, "overthrower will not fail allocations anymore.\n");
 
-    if (allocated.empty())
+    if (g_allocated.empty())
         return 0;
 
     fprintf(stderr, "overthrower has detected not freed memory blocks with following addresses:\n");
-    for (const auto& v : allocated)
+    for (const auto& v : g_allocated)
         fprintf(stderr, "0x%016" PRIxPTR "  -  %6d  -  %10zd\n", (uintptr_t)v.first, v.second.seq_num, v.second.size);
 
     fprintf(stderr, "^^^^^^^^^^^^^^^^^^  |  ^^^^^^  |  ^^^^^^^^^^\n");
@@ -292,48 +293,48 @@ extern "C" unsigned int deactivateOverthrower()
     fprintf(stderr, "                    |invocation|\n");
     fprintf(stderr, "                    |  number  |\n");
 
-    const auto blocks_leaked = static_cast<unsigned int>(allocated.size());
-    allocated.clear();
+    const auto blocks_leaked = static_cast<unsigned int>(g_allocated.size());
+    g_allocated.clear();
     return blocks_leaked;
 }
 
 extern "C" void pauseOverthrower(unsigned int duration)
 {
 #if defined(PLATFORM_OS_MAC_OS_X)
-    if (!initialized)
+    if (!g_initialized)
         initialize();
 #endif
 
     duration = duration == 0 ? UINT_MAX : duration;
 
-    if (state.depth == MAX_PAUSE_DEPTH) {
+    if (g_state.depth == MAX_PAUSE_DEPTH) {
         fprintf(stderr, "pause stack overflow detected.\n");
-        state.paused[MAX_PAUSE_DEPTH] = duration;
+        g_state.paused[MAX_PAUSE_DEPTH] = duration;
         return;
     }
 
-    state.paused[++state.depth] = duration;
+    g_state.paused[++g_state.depth] = duration;
 }
 
 extern "C" void resumeOverthrower()
 {
-    if (state.depth == 0) {
+    if (g_state.depth == 0) {
         fprintf(stderr, "pause stack underflow detected.\n");
         return;
     }
 
-    --state.depth;
+    --g_state.depth;
 }
 
 static bool isTimeToFail(unsigned int malloc_seq_num)
 {
-    switch (strategy) {
+    switch (g_strategy) {
         case STRATEGY_RANDOM:
-            return rand() % duty_cycle == 0;
+            return rand() % g_duty_cycle == 0;
         case STRATEGY_STEP:
-            return malloc_seq_num >= delay;
+            return malloc_seq_num >= g_delay;
         case STRATEGY_PULSE:
-            return malloc_seq_num > delay && malloc_seq_num <= delay + duration;
+            return malloc_seq_num > g_delay && malloc_seq_num <= g_delay + g_duration;
         case STRATEGY_NONE:
         default: // Just to make static code analyzers fully happy.
             return false;
@@ -342,7 +343,7 @@ static bool isTimeToFail(unsigned int malloc_seq_num)
 
 void* nonFailingMalloc(size_t size)
 {
-    if (self_overthrow && (rand() % 2) == 0) {
+    if (g_self_overthrow && (rand() % 2) == 0) {
         // By doing this we emulate real OOM conditions where native malloc can really return nullptr.
         // This may happen if tests are run on a system which is running out of resources.
         return nullptr;
@@ -410,37 +411,37 @@ static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
 void* my_malloc(size_t size)
 {
 #if defined(PLATFORM_OS_MAC_OS_X)
-    if (initializing)
+    if (g_initializing)
         return nonFailingMalloc(size);
 #endif
 
-    if (!initialized)
+    if (!g_initialized)
         initialize();
 
-    if (!activated)
+    if (!g_activated)
         return nonFailingMalloc(size);
 
-    const unsigned int depth = state.depth;
+    const unsigned int depth = g_state.depth;
     assert(depth <= MAX_PAUSE_DEPTH);
 
-    bool is_in_white_list = state.is_tracing;
+    bool is_in_white_list = g_state.is_tracing;
     bool is_in_ignore_list = false;
 
-    if (!state.is_tracing) {
-        state.is_tracing = true;
-        const unsigned int old_paused = state.paused[depth];
-        state.paused[depth] = UINT_MAX;
+    if (!g_state.is_tracing) {
+        g_state.is_tracing = true;
+        const unsigned int old_paused = g_state.paused[depth];
+        g_state.paused[depth] = UINT_MAX;
         searchKnowledgeBase(is_in_white_list, is_in_ignore_list);
-        state.paused[depth] = old_paused;
-        state.is_tracing = false;
+        g_state.paused[depth] = old_paused;
+        g_state.is_tracing = false;
     }
 
-    if (state.paused[depth]) {
-        --state.paused[depth];
+    if (g_state.paused[depth]) {
+        --g_state.paused[depth];
         return nonFailingMalloc(size);
     }
 
-    const unsigned int malloc_seq_num = malloc_counter++;
+    const unsigned int malloc_seq_num = g_malloc_counter++;
 
     if (is_in_white_list || !size)
         return nonFailingMalloc(size);
@@ -461,9 +462,9 @@ void* my_malloc(size_t size)
         // Register all allocations which are not in the ignore list.
         // All registered and not freed memory blocks are considered to be memory leaks.
         try {
-            std::lock_guard<std::recursive_mutex> lock(mutex);
+            std::lock_guard<std::recursive_mutex> lock(g_mutex);
             // Maybe I should have used emplace instead of insert but it is not possible due to incapability of GCC 4.8 dealing with it
-            allocated.insert({ pointer, { malloc_seq_num, size } });
+            g_allocated.insert({ pointer, { malloc_seq_num, size } });
         }
         catch (const std::bad_alloc&) {
             // Real OOM
@@ -478,9 +479,9 @@ void* my_malloc(size_t size)
 void my_free(void* pointer)
 {
     const int old_errno = errno;
-    if (activated && pointer) {
-        std::lock_guard<std::recursive_mutex> lock(mutex);
-        allocated.erase(pointer);
+    if (g_activated && pointer) {
+        std::lock_guard<std::recursive_mutex> lock(g_mutex);
+        g_allocated.erase(pointer);
     }
 
     native_free(pointer);
@@ -497,10 +498,10 @@ void* my_realloc(void* pointer, size_t size)
         return nullptr;
     }
 
-    if (!allocated.count(pointer))
+    if (!g_allocated.count(pointer))
         return native_realloc(pointer, size);
 
-    const size_t old_size = allocated.at(pointer).size;
+    const size_t old_size = g_allocated.at(pointer).size;
     void* new_ptr = my_malloc(size);
 
     if (!new_ptr)
