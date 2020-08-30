@@ -696,40 +696,40 @@ TEST(Overthrower, PreservingErrnoWithOverthrower)
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
 
-class CustomException : public std::exception {
-public:
-    CustomException() = default;
-
-    char placeholder[262144];
-};
-
-static unsigned int recursiveFunction(unsigned int value, unsigned int depth = 0U)
-{
-    if (depth == 32U) {
-        throw CustomException();
-    }
-
-    if (value == 0U) {
-        return 0U;
-    }
-    else {
-        return value + recursiveFunction(value - 1U, depth + 1U);
-    }
-}
-
 TEST(Overthrower, ThrowingException)
 {
+    class CustomException : public std::exception {
+    public:
+        CustomException() = default;
+
+        char placeholder[262144]{};
+    };
+
+    std::function<unsigned int(unsigned int, unsigned int)> recursiveFunction;
+    recursiveFunction = [&recursiveFunction](unsigned int value, unsigned int depth) {
+        if (depth == 32U) {
+            throw CustomException();
+        }
+
+        if (value == 0U) {
+            return 0U;
+        }
+        else {
+            return value + recursiveFunction(value - 1U, depth + 1U);
+        }
+    };
+
     static const unsigned int iterations = 5000;
     unsigned int failure_count = 0;
 
-    ASSERT_EQ(recursiveFunction(3U), 6U);
+    ASSERT_EQ(recursiveFunction(3U, 0U), 6U);
 
     OverthrowerConfiguratorRandom overthrower_configurator(2);
     activateOverthrower();
 
     for (unsigned int i = 0; i < iterations; ++i) {
         try {
-            const unsigned int result = recursiveFunction(32U);
+            const unsigned int result = recursiveFunction(32U, 0U);
             ASSERT_EQ(result, 528U);
         }
         catch (const CustomException&) {

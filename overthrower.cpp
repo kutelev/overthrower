@@ -95,8 +95,8 @@ struct State {
 static thread_local State state{};
 
 #if defined(PLATFORM_OS_MAC_OS_X)
-static ThreadLocal<bool> initialized;
-static ThreadLocal<bool> initializing;
+static ThreadLocal<bool> initialized;  // NOLINT
+static ThreadLocal<bool> initializing; // NOLINT
 #elif defined(PLATFORM_OS_LINUX)
 static bool initialized;
 #endif
