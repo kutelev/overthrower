@@ -34,6 +34,8 @@ protected:
 public:
     virtual ~AbstractOverthrowerConfigurator();
 
+    static void enableSelfOverthrowMode() { ASSERT_EQ(setenv("OVERTHROWER_SELF_OVERTHROW", "", 0), 0); }
+
     static void setEnv(const char* name, const char* value) { ASSERT_EQ(setenv(name, value, 1), 0); }
     static void setEnv(const char* name, unsigned int value) { ASSERT_EQ(setenv(name, std::to_string(value).c_str(), 1), 0); }
     static void unsetEnv(const char* name) { ASSERT_EQ(unsetenv(name), 0); }
@@ -41,7 +43,8 @@ public:
 
 AbstractOverthrowerConfigurator::~AbstractOverthrowerConfigurator()
 {
-    for (const char* name : { "OVERTHROWER_STRATEGY", "OVERTHROWER_SEED", "OVERTHROWER_DUTY_CYCLE", "OVERTHROWER_DELAY", "OVERTHROWER_DURATION" }) {
+    for (const char* name :
+         { "OVERTHROWER_STRATEGY", "OVERTHROWER_SEED", "OVERTHROWER_DUTY_CYCLE", "OVERTHROWER_DELAY", "OVERTHROWER_DURATION", "OVERTHROWER_SELF_OVERTHROW" }) {
         unsetEnv(name);
     }
 }
@@ -984,4 +987,28 @@ TEST(Overthrower, AtExit)
     };
 
     EXPECT_EXIT(subprocess(), ::testing::ExitedWithCode(0), "Exiting ...");
+}
+
+TEST(Overthrower, SelfOverthrow)
+{
+    constexpr unsigned int allocation_count = 16384U;
+
+    std::string real_pattern;
+    real_pattern.reserve(allocation_count);
+
+    OverthrowerConfiguratorRandom overthrower_configurator(2U);
+    OverthrowerConfiguratorRandom::enableSelfOverthrowMode();
+    activateOverthrower();
+
+    failureCounter(allocation_count, real_pattern);
+
+    EXPECT_EQ(deactivateOverthrower(), 0U);
+
+    const unsigned int failure_count = std::count(real_pattern.cbegin(), real_pattern.cend(), '-');
+
+    std::adjacent_difference(real_pattern.cbegin(), real_pattern.cend(), real_pattern.begin(), std::not_equal_to<char>());
+    const unsigned int switch_count = std::accumulate(real_pattern.cbegin() + 1U, real_pattern.cend(), 0U);
+
+    EXPECT_GT(switch_count, allocation_count / 4U);
+    EXPECT_GT(failure_count, allocation_count * 2U / 3U);
 }

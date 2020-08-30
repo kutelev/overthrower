@@ -82,6 +82,7 @@ void nonFailingFree(void* pointer);
 static const char* strategy_names[4] = { "random", "step", "pulse", "none" };
 
 static bool activated = false;
+static bool self_overthrow = false;
 static unsigned int strategy = STRATEGY_RANDOM;
 static unsigned int seed = 0;
 static unsigned int duty_cycle = 1024;
@@ -137,8 +138,9 @@ public:
     {
         assert(size > 0); // Do not expect STL containers to allocate memory blocks having no size.
         auto temp = reinterpret_cast<pointer>(nonFailingMalloc(size * sizeof(T)));
-        if (!temp)
-            throw std::bad_alloc();
+        if (!temp) {
+            throw std::bad_alloc(); // Real OOM
+        }
         return temp;
     }
 
@@ -265,11 +267,13 @@ extern "C" void activateOverthrower()
             fprintf(stderr, "Duration = %u\n", duration);
         }
     }
+    self_overthrow = getenv("OVERTHROWER_SELF_OVERTHROW") != nullptr;
     activated = true;
 }
 
 extern "C" unsigned int deactivateOverthrower()
 {
+    self_overthrow = false;
     activated = false;
     state = {};
 
@@ -340,6 +344,12 @@ static bool isTimeToFail(unsigned int malloc_seq_num)
 
 void* nonFailingMalloc(size_t size)
 {
+    if (self_overthrow && (rand() % 2) == 0) {
+        // By doing this we emulate real OOM conditions where native malloc can really return nullptr.
+        // This may happen if tests are run on a system which is running out of resources.
+        return nullptr;
+    }
+
 #if defined(PLATFORM_OS_MAC_OS_X)
     return malloc(size);
 #elif defined(PLATFORM_OS_LINUX)
@@ -359,6 +369,7 @@ static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
     char** symbols = backtrace_symbols(callstack, count);
 
     if (!symbols) {
+        // Real OOM
         is_in_white_list = true;
         is_in_ignore_list = true;
         return;
@@ -444,8 +455,7 @@ void* my_malloc(size_t size)
     void* pointer = nonFailingMalloc(size);
 
     if (!pointer) {
-        // Real OOM, in this case overthrower itself is being overthrown by an OS.
-        return nullptr;
+        return nullptr; // Real OOM
     }
 
     // is_in_ignore_list is never true alone on macOS that is why we do not use return ASAP approach at this place.
@@ -458,7 +468,7 @@ void* my_malloc(size_t size)
             allocated.insert({ pointer, { malloc_seq_num, size } });
         }
         catch (const std::bad_alloc&) {
-            // Real OOM, in this case overthrower itself is being overthrown by an OS.
+            // Real OOM
             nonFailingFree(pointer);
             return nullptr;
         }
