@@ -366,8 +366,11 @@ static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
     is_in_ignore_list = false;
 
 #if defined(PLATFORM_OS_MAC_OS_X)
-    if (count >= 4 && (strstr(symbols[3], "__cxa_allocate_exception") || strstr(symbols[2], "__cxa_allocate_exception")))
+    if (count >= 4 && (strstr(symbols[3], "__cxa_allocate_exception") || strstr(symbols[2], "__cxa_allocate_exception"))) {
+        // This branch is reachable with macOS 10.14 / Xcode 10 and older.
+        // In newer environments some other mechanism seems to be used for allocating exception objects.
         is_in_white_list = true;
+    }
 
     // __cxa_atexit is not supposed to be used explicitly but overthrower needs to be aware of existence of this function:
     // Allocations which come from __cxa_atexit shall not be failed by overthrower.
