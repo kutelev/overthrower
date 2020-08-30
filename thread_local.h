@@ -10,10 +10,19 @@ class ThreadLocal final {
     static_assert(sizeof(T) <= sizeof(uintptr_t), "Inappropriate data type");
 
 public:
-    ThreadLocal() { pthread_key_create(&key, nullptr); }
+    ThreadLocal()
+    {
+        // Theoretically pthread_key_create can fail but if this happens on this early stage there is nothing we can do to handle this.
+        // Considering failed pthread_key_create invocations as disastrous cases and doing nothing regarding this.
+        pthread_key_create(&key, nullptr);
+    }
     ~ThreadLocal() { pthread_key_delete(key); }
 
-    ThreadLocal& operator=(T value) { set(value); return *this; }
+    ThreadLocal& operator=(T value)
+    {
+        set(value);
+        return *this;
+    }
     operator T() const { return get(); }
 
 private:
