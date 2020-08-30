@@ -161,9 +161,9 @@ static void initialize()
     state = {};
     initializing = false;
 #elif defined(PLATFORM_OS_LINUX)
-    native_malloc = (Malloc)dlsym(RTLD_NEXT, "malloc");
-    native_realloc = (Realloc)dlsym(RTLD_NEXT, "realloc");
-    native_free = (Free)dlsym(RTLD_NEXT, "free");
+    native_malloc = reinterpret_cast<decltype(native_malloc)>(dlsym(RTLD_NEXT, "malloc"));
+    native_realloc = reinterpret_cast<decltype(native_realloc)>(dlsym(RTLD_NEXT, "realloc"));
+    native_free = reinterpret_cast<decltype(native_free)>(dlsym(RTLD_NEXT, "free"));
 #endif
     initialized = true;
 }
