@@ -450,7 +450,7 @@ TEST(Overthrower, PauseNotActivated)
 TEST(Overthrower, RandomParameters)
 {
     constexpr unsigned int iteration_count = 128U;
-    constexpr unsigned int allocation_count = 65536U;
+    constexpr unsigned int allocation_count = 1024U;
     unsigned int strategy_random_chosen_times = 0U;
     unsigned int strategy_random_step_times = 0U;
     unsigned int strategy_random_pulse_times = 0U;
@@ -468,7 +468,9 @@ TEST(Overthrower, RandomParameters)
         std::adjacent_difference(real_pattern.cbegin(), real_pattern.cend(), real_pattern.begin(), std::not_equal_to<char>());
         const unsigned int switch_count = std::accumulate(real_pattern.cbegin() + 1U, real_pattern.cend(), 0U);
 
-        EXPECT_GT(switch_count, 0U);
+        // Note: switch_count can be 0 under the following conditions:
+        // strategy = step
+        // delay = 0
 
         if (switch_count == 1U) {
             ++strategy_random_step_times;
@@ -983,8 +985,8 @@ TEST(Overthrower, ImplicitDeactivation)
     EXPECT_EXIT(subprocess(), ::testing::ExitedWithCode(1), "overthrower has not been deactivated explicitly, doing it anyway.");
 }
 
-extern "C" int __cxa_atexit(void (*func)(void*), void* arg, void* d);
-extern void* __dso_handle;
+extern "C" int __cxa_atexit(void (*func)(void*), void* arg, void* d); // NOLINT
+extern void* __dso_handle;                                            // NOLINT
 
 static void exitFunction(void*)
 {
