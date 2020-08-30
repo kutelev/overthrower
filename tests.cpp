@@ -3,10 +3,15 @@
 #include <numeric>
 #include <thread>
 
+#include "platform.h"
+
+#if defined(PLATFORM_OS_LINUX)
+#include <dlfcn.h>
+#endif
+
 #include <gtest/gtest.h>
 
 #include "overthrower.h"
-#include "platform.h"
 #include "thread_local.h"
 
 #define STRATEGY_RANDOM 0U
@@ -1005,6 +1010,21 @@ TEST(Overthrower, AtExit)
 
     EXPECT_EXIT(subprocess(), ::testing::ExitedWithCode(0), "Exiting ...");
 }
+
+#if defined(PLATFORM_OS_LINUX)
+TEST(Overthrower, DlError)
+{
+    OverthrowerConfiguratorNone overthrower_configurator;
+    activateOverthrower();
+
+    void* handle = dlopen("non_existing_library.so", RTLD_NOW);
+    ASSERT_EQ(handle, nullptr);
+    const char* error = dlerror();
+    ASSERT_NE(error, nullptr);
+
+    EXPECT_EQ(deactivateOverthrower(), 0U);
+}
+#endif
 
 TEST(Overthrower, SelfOverthrow)
 {

@@ -33,7 +33,7 @@
 #error "Unsupported OS"
 #endif
 
-#define MAX_STACK_DEPTH 4
+#define MAX_STACK_DEPTH 5
 #define MAX_PAUSE_DEPTH 16
 
 typedef void* (*Malloc)(size_t size);
@@ -396,12 +396,16 @@ static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
         is_in_ignore_list = true;
     }
 #elif defined(PLATFORM_OS_LINUX)
-    if (count >= 3 && (strstr(symbols[2], "__cxa_allocate_exception") || strstr(symbols[1], "__cxa_allocate_exception")))
+    if (count >= 3 && (strstr(symbols[2], "__cxa_allocate_exception") || strstr(symbols[1], "__cxa_allocate_exception"))) {
         is_in_white_list = true;
-    if (count >= 3 && strstr(symbols[2], "ld-linux"))
+    }
+    if (count >= 3 && strstr(symbols[2], "ld-linux")) {
         is_in_ignore_list = true;
-    if (count >= 4 && strstr(symbols[3], "dlerror"))
+    }
+    if (count >= 5 && (strstr(symbols[4], "dlerror") || strstr(symbols[3], "dlerror"))) {
+        // dlerror formats an error message using asprintf/vasprintf. This memory is not released explicitly and can be falsely treated as a memory leak.
         is_in_ignore_list = true;
+    }
 #endif
 
 #if 0
