@@ -206,8 +206,12 @@ static unsigned int generateRandomValue(const unsigned int min_val, const unsign
     unsigned int value = (min_val + max_val) / 2;
     FILE* file = fopen("/dev/urandom", "rb");
     if (file) {
-        if (fread(&value, 1, sizeof(int), file) != sizeof(int))
-            value = (min_val + max_val) / 2;
+        unsigned int tmp_value;
+        // Very unlikely that fread will ever read less than sizeof(int) bytes.
+        // Still be ready to all kinds oddities.
+        if (fread(&tmp_value, 1, sizeof(int), file) == sizeof(int)) {
+            value = tmp_value;
+        }
         fclose(file);
     }
     value = value % (max_val - min_val + (max_val == UINT_MAX ? 0 : 1));
