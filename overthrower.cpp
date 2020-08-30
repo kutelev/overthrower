@@ -13,17 +13,20 @@
 #include <cstdlib>
 #include <cstring>
 
-#include <dlfcn.h>
-#include <execinfo.h>
-#include <pthread.h>
+#include "platform.h"
 
-#include <limits>
+#if defined(PLATFORM_OS_LINUX)
+#include <dlfcn.h>
+#endif
+#include <execinfo.h>
+
 #include <mutex>
 #include <new>
 #include <unordered_map>
 
-#include "platform.h"
+#if defined(PLATFORM_OS_MAC_OS_X)
 #include "thread_local.h"
+#endif
 
 #if !defined(PLATFORM_OS_MAC_OS_X) && !defined(PLATFORM_OS_LINUX)
 #error "Unsupported OS"
@@ -132,8 +135,7 @@ public:
 
     pointer allocate(size_type size)
     {
-        if (!size)
-            return nullptr;
+        assert(size > 0); // Do not expect STL containers to allocate memory blocks having no size.
         auto temp = reinterpret_cast<pointer>(nonFailingMalloc(size * sizeof(T)));
         if (!temp)
             throw std::bad_alloc();
@@ -146,8 +148,8 @@ public:
     void destroy(pointer p) { p->~T(); }
 };
 
-static std::recursive_mutex mutex;
-static std::unordered_map<void*, Info, std::hash<void*>, std::equal_to<void*>, mallocFreeAllocator<std::pair<void* const, Info>>> allocated;
+static std::recursive_mutex mutex;                                                                                                           // NOLINT
+static std::unordered_map<void*, Info, std::hash<void*>, std::equal_to<void*>, mallocFreeAllocator<std::pair<void* const, Info>>> allocated; // NOLINT
 
 extern "C" unsigned int deactivateOverthrower();
 
