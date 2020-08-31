@@ -23,22 +23,34 @@ matrix:
 
     - os: linux
       dist: trusty
-      env: USE_LIBUNWIND=1
+      env:
+        - USE_LIBUNWIND=1
+        - MEASURE_COVERAGE=1
     - os: linux
       dist: xenial
-      env: USE_LIBUNWIND=1
+      env:
+        - USE_LIBUNWIND=1
+        - MEASURE_COVERAGE=1
     - os: linux
       dist: bionic
-      env: USE_LIBUNWIND=1
+      env:
+        - USE_LIBUNWIND=1
+        - MEASURE_COVERAGE=1
     - os: linux
       dist: focal
-      env: USE_LIBUNWIND=1
+      env:
+        - USE_LIBUNWIND=1
+        - MEASURE_COVERAGE=1
     - os: linux
       dist: bionic
-      env: USE_LIBUNWIND=1
+      env:
+        - USE_LIBUNWIND=1
+        - MEASURE_COVERAGE=1
     - os: linux
       dist: focal
-      env: USE_LIBUNWIND=1
+      env:
+        - USE_LIBUNWIND=1
+        - MEASURE_COVERAGE=1
 
     - os: osx
       osx_image: xcode8.3
