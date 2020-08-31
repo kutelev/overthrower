@@ -16,10 +16,16 @@
 
 #include "platform.h"
 
+#if defined(WITH_LIBUNWIND) // libunwind is basically available on Linux only.
+#define UNW_LOCAL_ONLY
+#include <cxxabi.h> // for __cxa_demangle
+#include <libunwind.h>
+#else
+#include <execinfo.h>
+#endif
 #if defined(PLATFORM_OS_LINUX)
 #include <dlfcn.h>
 #endif
-#include <execinfo.h>
 
 #include <mutex>
 #include <new>
@@ -33,7 +39,12 @@
 #error "Unsupported OS"
 #endif
 
+#if defined(PLATFORM_OS_LINUX)
+#define MAX_STACK_DEPTH 6
+#elif defined(PLATFORM_OS_MAC_OS_X)
 #define MAX_STACK_DEPTH 5
+#endif
+#define MAX_STACK_DEPTH_VERBOSE 256
 #define MAX_PAUSE_DEPTH 16
 
 typedef void* (*Malloc)(size_t size);
@@ -65,10 +76,12 @@ static Free native_free = nullptr;
 void* nonFailingMalloc(size_t size);
 void nonFailingFree(void* pointer);
 
-#define STRATEGY_RANDOM 0
-#define STRATEGY_STEP 1
-#define STRATEGY_PULSE 2
-#define STRATEGY_NONE 3
+enum {
+    STRATEGY_RANDOM = 0U,
+    STRATEGY_STEP = 1U,
+    STRATEGY_PULSE = 2U,
+    STRATEGY_NONE = 3U,
+};
 
 #define MIN_DUTY_CYCLE 1
 #define MAX_DUTY_CYCLE 4096
@@ -80,10 +93,17 @@ void nonFailingFree(void* pointer);
 #define MIN_DURATION 1
 #define MAX_DURATION 100
 
+enum {
+    VERBOSE_NO = 0U,
+    VERBOSE_FAILED_ALLOCATIONS = 1U,
+    VERBOSE_ALL_ALLOCATIONS = 2U,
+};
+
 static std::array<const char*, 4> g_strategy_names{ "random", "step", "pulse", "none" };
 
 static bool g_activated = false;
 static bool g_self_overthrow = false;
+static unsigned int g_verbose_mode = VERBOSE_NO;
 static unsigned int g_strategy = STRATEGY_RANDOM;
 static unsigned int g_seed = 0;
 static unsigned int g_duty_cycle = 1024;
@@ -219,10 +239,25 @@ static unsigned int generateRandomValue(const unsigned int min_val, const unsign
     return value;
 }
 
-static unsigned int readValFromEnvVar(const char* env_var_name, unsigned int min_val, unsigned int max_val, unsigned int max_random_val = 0)
+static unsigned int readValFromEnvVar(const char* env_var_name,
+                                      unsigned int min_val,
+                                      unsigned int max_val,
+                                      unsigned int max_random_val = 0,
+                                      unsigned int default_value = UINT_MAX)
 {
     const char* env_var_val = getenv(env_var_name);
     unsigned long int value;
+
+    if (default_value != UINT_MAX) {
+        if (!env_var_val) {
+            return default_value;
+        }
+        if (strToUnsignedLongInt(env_var_val, &value) || value < min_val || value > max_val) {
+            fprintf(stderr, "%s has incorrect value (%s). Using a default value (%u).\n", env_var_name, env_var_val, default_value);
+            return default_value;
+        }
+        return static_cast<unsigned int>(value);
+    }
 
     if (!env_var_val) {
         const unsigned int random_value = generateRandomValue(min_val, max_random_val ? max_random_val : max_val);
@@ -235,7 +270,7 @@ static unsigned int readValFromEnvVar(const char* env_var_name, unsigned int min
         return random_value;
     }
 
-    return (unsigned int)value;
+    return static_cast<unsigned int>(value);
 }
 
 extern "C" void activateOverthrower()
@@ -272,7 +307,13 @@ extern "C" void activateOverthrower()
             fprintf(stderr, "Duration = %u\n", g_duration);
         }
     }
+
     g_self_overthrow = getenv("OVERTHROWER_SELF_OVERTHROW") != nullptr;
+    fprintf(stderr, "Self overthrow mode = %s\n", g_self_overthrow ? "enabled" : "disabled");
+
+    g_verbose_mode = readValFromEnvVar("OVERTHROWER_VERBOSE", VERBOSE_NO, VERBOSE_ALL_ALLOCATIONS, 0U, VERBOSE_NO);
+    fprintf(stderr, "Verbose mode = %u\n", g_verbose_mode);
+
     g_activated = true;
 }
 
@@ -365,55 +406,154 @@ void nonFailingFree(void* pointer)
     native_free(pointer);
 }
 
-static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
+// returns is_in_white_list, is_in_ignore_list pair.
+typedef std::pair<bool, bool> (
+    *BacktraceCallback)(unsigned int depth, uintptr_t ip, uintptr_t sp, const char* library_name, const char* func_name, uintptr_t off);
+
+#if defined(WITH_LIBUNWIND)
+// ip - instruction pointer
+// sp - stack pointer
+static std::pair<bool, bool> printFrameInfo(unsigned int depth, uintptr_t ip, uintptr_t sp, const char* library_name, const char* func_name, uintptr_t off)
 {
-    void* callstack[MAX_STACK_DEPTH];
-    const int count = backtrace(callstack, MAX_STACK_DEPTH);
+    fprintf(stderr, "#%-2u 0x%016" PRIxPTR " sp=0x%016" PRIxPTR " %s - %s + 0x%" PRIxPTR "\n", depth, ip, sp, library_name, func_name, off);
+#else
+static std::pair<bool, bool> printFrameInfo(unsigned int depth, uintptr_t, uintptr_t, const char*, const char* func_name, uintptr_t)
+{
+    // Only function name is known, nothing else.
+    fprintf(stderr, "#%-2u %s\n", depth, func_name);
+#endif
+    return std::make_pair(false, false);
+}
+
+__attribute__((noinline)) static std::pair<bool, bool> traverseStack(BacktraceCallback callback)
+{
+#if defined(WITH_LIBUNWIND)
+    unw_cursor_t cursor;
+    unw_context_t context;
+    Dl_info dl_info;
+
+    unw_getcontext(&context);
+    unw_init_local(&cursor, &context);
+
+    for (unsigned int i = 0; unw_step(&cursor) > 0; ++i) {
+        if (i < 1) {
+            // Skip the topmost frame.
+            continue;
+        }
+
+        if (g_verbose_mode == VERBOSE_NO && i >= MAX_STACK_DEPTH) {
+            // No need to go deeper.
+            break;
+        }
+
+        unw_word_t ip{};
+        unw_word_t sp{};
+        unw_word_t off;
+
+        if (g_verbose_mode != VERBOSE_NO) {
+            // These are needed to be populated only in verbose modes.
+            unw_get_reg(&cursor, UNW_REG_IP, &ip);
+            unw_get_reg(&cursor, UNW_REG_SP, &sp);
+        }
+
+        char symbol[256] = { "???" };
+        char* name;
+
+        if (unw_get_proc_name(&cursor, symbol, sizeof(symbol), &off) == 0) {
+            int status;
+            name = abi::__cxa_demangle(symbol, nullptr, nullptr, &status);
+            if (status != 0) {
+                name = symbol;
+            }
+        }
+        else {
+            return std::make_pair(true, true); // Real OOM.
+        }
+
+        const char* file_name = "???";
+
+        if (g_verbose_mode != VERBOSE_NO && dladdr(reinterpret_cast<void*>(ip + off), &dl_info) && dl_info.dli_fname && *dl_info.dli_fname) {
+            file_name = dl_info.dli_fname;
+        }
+
+        const auto check_status = callback(i, static_cast<uintptr_t>(ip), static_cast<uintptr_t>(sp), file_name, name, static_cast<uintptr_t>(off));
+
+        if (name != symbol)
+            free(name);
+
+        if (check_status.first || check_status.second)
+            return check_status;
+    }
+
+    return std::make_pair(false, false);
+#else
+    void* callstack[MAX_STACK_DEPTH_VERBOSE];
+    const int count = backtrace(callstack, callback == printFrameInfo ? MAX_STACK_DEPTH_VERBOSE : MAX_STACK_DEPTH);
     char** symbols = backtrace_symbols(callstack, count);
 
     if (!symbols) {
         // Real OOM
-        is_in_white_list = true;
-        is_in_ignore_list = true;
-        return;
+        return std::make_pair(true, true);
     }
 
-    is_in_white_list = false;
-    is_in_ignore_list = false;
+    for (unsigned int depth = 1; depth < count; ++depth) {
+        const auto check_status = callback(depth, 0U, 0U, nullptr, symbols[depth], 0U);
+        if (check_status.first || check_status.second) {
+            free(symbols);
+            return check_status;
+        }
+    }
+
+    free(symbols);
+
+    return std::make_pair(false, false);
+#endif
+}
 
 #if defined(PLATFORM_OS_MAC_OS_X)
-    if (count >= 4 && (strstr(symbols[3], "__cxa_allocate_exception") || strstr(symbols[2], "__cxa_allocate_exception"))) {
+__attribute__((noinline)) static std::pair<bool, bool> checker(unsigned int depth, uintptr_t, uintptr_t, const char*, const char* func_name, uintptr_t)
+{
+    if ((depth == 3 || depth == 4) && strstr(func_name, "__cxa_allocate_exception")) {
         // This branch is reachable with macOS 10.14 / Xcode 10 and older.
         // In newer environments some other mechanism seems to be used for allocating exception objects.
-        is_in_white_list = true;
+        return std::make_pair(true, false);
     }
 
     // __cxa_atexit is not supposed to be used explicitly but overthrower needs to be aware of existence of this function:
     // Allocations which come from __cxa_atexit shall not be failed by overthrower.
     // Memory which is allocated by __cxa_atexit shall not be treated as memory leak.
-    if (count >= 4 && (strstr(symbols[3], "__cxa_atexit") || strstr(symbols[2], "__cxa_atexit"))) {
-        is_in_white_list = true;
-        is_in_ignore_list = true;
+    if ((depth == 3 || depth == 4) && strstr(func_name, "__cxa_atexit")) {
+        return std::make_pair(true, true);
     }
+
+    return std::make_pair(false, false);
+}
 #elif defined(PLATFORM_OS_LINUX)
-    if (count >= 3 && (strstr(symbols[2], "__cxa_allocate_exception") || strstr(symbols[1], "__cxa_allocate_exception"))) {
-        is_in_white_list = true;
+static std::pair<bool, bool> checker(unsigned int depth, uintptr_t, uintptr_t, const char*, const char* func_name, uintptr_t)
+{
+    if ((depth == 2 || depth == 3) && strstr(func_name, "__cxa_allocate_exception")) {
+        return std::make_pair(true, false);
     }
-    if (count >= 3 && strstr(symbols[2], "ld-linux")) {
-        is_in_ignore_list = true;
+    if (depth == 3 && strstr(func_name, "ld-linux")) {
+        return std::make_pair(false, true);
     }
-    if (count >= 5 && (strstr(symbols[4], "dlerror") || strstr(symbols[3], "dlerror"))) {
-        // dlerror formats an error message using asprintf/vasprintf. This memory is not released explicitly and can be falsely treated as a memory leak.
-        is_in_ignore_list = true;
+    if ((depth == 4 || depth == 5) && strstr(func_name, "dlerror")) {
+        return std::make_pair(false, true);
     }
+    if (strstr(func_name, "__libpthread_freeres")) {
+        // https://patches-gcc.linaro.org/patch/6525/
+        return std::make_pair(false, true);
+    }
+
+    return std::make_pair(false, false);
+}
 #endif
 
-#if 0
-    for (int i = 1; i < count; ++i )
-        printf("%d: %s\n", i, symbols[i]);
-#endif
-
-    free(symbols);
+__attribute__((noinline)) static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
+{
+    const auto check_result = traverseStack(checker);
+    is_in_white_list = check_result.first;
+    is_in_ignore_list = check_result.second;
 }
 
 void* my_malloc(size_t size)
@@ -455,6 +595,15 @@ void* my_malloc(size_t size)
         return nonFailingMalloc(size);
 
     if (isTimeToFail(malloc_seq_num)) {
+        if (g_verbose_mode == VERBOSE_FAILED_ALLOCATIONS) {
+            g_state.is_tracing = true;
+            const unsigned int old_paused = g_state.paused[depth];
+            g_state.paused[depth] = UINT_MAX;
+            fprintf(stderr, "\n### Failed allocation, sequential number: %u ###\n", malloc_seq_num);
+            traverseStack(printFrameInfo);
+            g_state.paused[depth] = old_paused;
+            g_state.is_tracing = false;
+        }
         errno = ENOMEM;
         return nullptr;
     }
@@ -477,7 +626,17 @@ void* my_malloc(size_t size)
         catch (const std::bad_alloc&) {
             // Real OOM
             nonFailingFree(pointer);
+            errno = ENOMEM;
             return nullptr;
+        }
+        if (g_verbose_mode >= VERBOSE_FAILED_ALLOCATIONS) {
+            g_state.is_tracing = true;
+            const unsigned int old_paused = g_state.paused[depth];
+            g_state.paused[depth] = UINT_MAX;
+            fprintf(stderr, "\n### Successful allocation, sequential number: %u ###\n", malloc_seq_num);
+            traverseStack(printFrameInfo);
+            g_state.paused[depth] = old_paused;
+            g_state.is_tracing = false;
         }
     }
 

@@ -19,6 +19,10 @@
 #define STRATEGY_PULSE 2U
 #define STRATEGY_NONE 3U
 
+#define VERBOSE_NO 0U
+#define VERBOSE_FAILED_ALLOCATIONS 1U
+#define VERBOSE_ALL_ALLOCATIONS 2U
+
 static void* (*volatile forced_memset)(void*, int, size_t) = memset;
 
 GTEST_API_ int main(int argc, char** argv)
@@ -40,6 +44,7 @@ public:
     virtual ~AbstractOverthrowerConfigurator();
 
     static void enableSelfOverthrowMode() { ASSERT_EQ(setenv("OVERTHROWER_SELF_OVERTHROW", "", 0), 0); }
+    static void setVerboseMode(unsigned int mode) { ASSERT_EQ(setenv("OVERTHROWER_VERBOSE", std::to_string(mode).c_str(), 0), 0); }
 
     static void setEnv(const char* name, const char* value) { ASSERT_EQ(setenv(name, value, 1), 0); }
     static void setEnv(const char* name, unsigned int value) { ASSERT_EQ(setenv(name, std::to_string(value).c_str(), 1), 0); }
@@ -48,8 +53,13 @@ public:
 
 AbstractOverthrowerConfigurator::~AbstractOverthrowerConfigurator()
 {
-    for (const char* name :
-         { "OVERTHROWER_STRATEGY", "OVERTHROWER_SEED", "OVERTHROWER_DUTY_CYCLE", "OVERTHROWER_DELAY", "OVERTHROWER_DURATION", "OVERTHROWER_SELF_OVERTHROW" }) {
+    for (const char* name : { "OVERTHROWER_STRATEGY",
+                              "OVERTHROWER_SEED",
+                              "OVERTHROWER_DUTY_CYCLE",
+                              "OVERTHROWER_DELAY",
+                              "OVERTHROWER_DURATION",
+                              "OVERTHROWER_SELF_OVERTHROW",
+                              "OVERTHROWER_VERBOSE" }) {
         unsetEnv(name);
     }
 }
@@ -119,7 +129,7 @@ protected:
     }
 };
 
-static void fragileCode(unsigned int iterations = 100500)
+static void fragileCode(unsigned int iterations = 1024)
 {
     for (unsigned int i = 0; i < iterations; ++i) {
         char* string = strdup("string");
@@ -1002,6 +1012,7 @@ TEST(Overthrower, AtExit)
 {
     auto subprocess = []() {
         OverthrowerConfiguratorStep overthrower_configurator(0);
+        OverthrowerConfiguratorStep::setVerboseMode(2U);
         activateOverthrower();
         // __cxa_atexit start allocating after it is invoked dozens of times. Invoke this 64 times.
         for (int i = 0; i < 64; ++i) {
@@ -1048,6 +1059,26 @@ TEST(Overthrower, SelfOverthrow)
     std::adjacent_difference(real_pattern.cbegin(), real_pattern.cend(), real_pattern.begin(), std::not_equal_to<char>());
     const unsigned int switch_count = std::accumulate(real_pattern.cbegin() + 1U, real_pattern.cend(), 0U);
 
-    EXPECT_GT(switch_count, allocation_count / 4U);
+    EXPECT_GT(switch_count, allocation_count / 8U);
     EXPECT_GT(failure_count, allocation_count * 2U / 3U);
+}
+
+TEST(Overthrower, VerboseMode) {
+    constexpr unsigned int allocation_count = 16U;
+
+    for (bool enable_self_overthrow_mode : {false, true}) {
+        for (unsigned int verbose_mode : { VERBOSE_NO, VERBOSE_FAILED_ALLOCATIONS, VERBOSE_ALL_ALLOCATIONS }) {
+            std::string real_pattern;
+            real_pattern.reserve(allocation_count);
+
+            OverthrowerConfiguratorRandom overthrower_configurator(2U);
+            if (enable_self_overthrow_mode) {
+                OverthrowerConfiguratorRandom::enableSelfOverthrowMode();
+            }
+            OverthrowerConfiguratorRandom::setVerboseMode(verbose_mode);
+            activateOverthrower();
+            failureCounter(allocation_count, real_pattern);
+            EXPECT_EQ(deactivateOverthrower(), 0U);
+        }
+    }
 }
