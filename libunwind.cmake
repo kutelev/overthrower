@@ -4,7 +4,7 @@ if(NOT EXISTS "${CMAKE_BINARY_DIR}/libunwind")
             git clone -b v1.4.0 --depth 1 https://github.com/libunwind/libunwind.git libunwind
         WORKING_DIRECTORY
             "${CMAKE_BINARY_DIR}"
-        RESULTS_VARIABLE
+        RESULT_VARIABLE
             RET_CODE
     )
     if(NOT "${RET_CODE}" STREQUAL "0")
@@ -16,7 +16,7 @@ if(NOT EXISTS "${CMAKE_BINARY_DIR}/libunwind")
             ./autogen.sh
         WORKING_DIRECTORY
             "${CMAKE_BINARY_DIR}/libunwind"
-        RESULTS_VARIABLE
+        RESULT_VARIABLE
             RET_CODE
     )
     if(NOT "${RET_CODE}" STREQUAL "0")
@@ -28,7 +28,7 @@ if(NOT EXISTS "${CMAKE_BINARY_DIR}/libunwind")
             ./configure CFLAGS=-fPIC CXXFLAGS=-fPIC
         WORKING_DIRECTORY
             "${CMAKE_BINARY_DIR}/libunwind"
-        RESULTS_VARIABLE
+        RESULT_VARIABLE
             RET_CODE
     )
     if(NOT "${RET_CODE}" STREQUAL "0")
@@ -40,7 +40,7 @@ if(NOT EXISTS "${CMAKE_BINARY_DIR}/libunwind")
             make install prefix="${CMAKE_BINARY_DIR}/libunwind/usr/local"
         WORKING_DIRECTORY
             "${CMAKE_BINARY_DIR}/libunwind"
-        RESULTS_VARIABLE
+        RESULT_VARIABLE
             RET_CODE
     )
     if(NOT "${RET_CODE}" STREQUAL "0")
