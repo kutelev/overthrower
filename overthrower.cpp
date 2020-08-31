@@ -459,8 +459,13 @@ __attribute__((noinline)) static std::pair<bool, bool> traverseStack(BacktraceCa
         char symbol[256] = { "???" };
         char* name;
 
-        if (unw_get_proc_name(&cursor, symbol, sizeof(symbol), &off) == 0) {
-            int status;
+        int status = -UNW_EUNSPEC;
+        while (status == -UNW_EUNSPEC) {
+            // unw_get_proc_name may spontaneously report an error in multi-threaded environments.
+            // If this kludge is removed the MultipleThreadsShortTermPause test randomly fails.
+            status = unw_get_proc_name(&cursor, symbol, sizeof(symbol), &off);
+        }
+        if (status == 0) {
             name = abi::__cxa_demangle(symbol, nullptr, nullptr, &status);
             if (status != 0) {
                 name = symbol;
