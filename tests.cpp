@@ -109,7 +109,8 @@ class OverthrowerRandomParameters : public AbstractOverthrowerConfigurator {
 public:
     OverthrowerRandomParameters()
     {
-        for (const char* name : { "OVERTHROWER_STRATEGY", "OVERTHROWER_SEED", "OVERTHROWER_DUTY_CYCLE", "OVERTHROWER_DELAY", "OVERTHROWER_DURATION" }) {
+        for (const char* name :
+             { "OVERTHROWER_STRATEGY", "OVERTHROWER_SEED", "OVERTHROWER_DUTY_CYCLE", "OVERTHROWER_DELAY", "OVERTHROWER_DURATION", "OVERTHROWER_VERBOSE" }) {
             setParameterToInvalidValue(name);
         }
     }
@@ -1063,10 +1064,11 @@ TEST(Overthrower, SelfOverthrow)
     EXPECT_GT(failure_count, allocation_count * 2U / 3U);
 }
 
-TEST(Overthrower, VerboseMode) {
+TEST(Overthrower, VerboseMode)
+{
     constexpr unsigned int allocation_count = 16U;
 
-    for (bool enable_self_overthrow_mode : {false, true}) {
+    for (bool enable_self_overthrow_mode : { false, true }) {
         for (unsigned int verbose_mode : { VERBOSE_NO, VERBOSE_FAILED_ALLOCATIONS, VERBOSE_ALL_ALLOCATIONS }) {
             std::string real_pattern;
             real_pattern.reserve(allocation_count);
