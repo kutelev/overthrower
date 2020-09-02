@@ -21,7 +21,7 @@ execute_tests() {
   if [[ "$(uname)" == "Linux" ]]; then
     LD_LIBRARY_PATH=. LD_PRELOAD=liboverthrower.so ./overthrower_tests
   elif [[ "$(uname)" == "Darwin" ]]; then
-    DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=./overthrower.framework/Versions/Current/overthrower ./overthrower_tests
+    DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=./Frameworks/overthrower.framework/Versions/Current/overthrower ./overthrower_tests
   fi
 }
 
@@ -43,7 +43,7 @@ if [[ "${MEASURE_COVERAGE}" == "1" ]]; then
     export CC=clang
     export CXX=clang++
   elif [[ "$(uname)" == "Darwin" ]]; then
-    export OVERTHROWER_LIBRARY_PATH=./overthrower.framework/Versions/Current/overthrower
+    export OVERTHROWER_LIBRARY_PATH=./Frameworks/overthrower.framework/Versions/Current/overthrower
     export LLVM_PROFDATA="xcrun llvm-profdata"
     export LLVM_COV="xcrun llvm-cov"
   fi
