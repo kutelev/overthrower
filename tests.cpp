@@ -29,7 +29,7 @@ static void* (*volatile forced_memset)(void*, int, size_t) = memset;
 static unsigned int randomNumber()
 {
     static std::mt19937 random_number_engine; // NOLINT
-    static std::uniform_int_distribution< unsigned int > distribution;
+    static std::uniform_int_distribution<unsigned int> distribution;
     static auto generateRandomNumber = std::bind(distribution, random_number_engine);
     return generateRandomNumber();
 }
@@ -352,7 +352,8 @@ TEST(Overthrower, SingleThreadShortTermPause) // NOLINT
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
 
-#if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
+#if defined(PLATFORM_OS_LINUX) || \
+    (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037) // Xcode 9.0 (installed on macOS 10.13 (High Sierra) on Travis CI)
 // With Earlier Xcode versions std::thread constructor crashes instead of throwing an exception in OOM conditions
 TEST(Overthrower, MultipleThreadsShortTermPause) // NOLINT
 {
@@ -512,7 +513,8 @@ TEST(Overthrower, RandomParameters) // NOLINT
 
 TEST(Overthrower, StrategyRandom) // NOLINT
 {
-#if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
+#if defined(PLATFORM_OS_LINUX) || \
+    (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037) // Xcode 9.0 (installed on macOS 10.13 (High Sierra) on Travis CI)
     static constexpr unsigned int thread_count_variants[] = { 1, 2, 8 };
 #else
     static constexpr unsigned int thread_count_variants[] = { 1 };
@@ -568,7 +570,8 @@ TEST(Overthrower, StrategyRandom) // NOLINT
 
 TEST(Overthrower, StrategyStep) // NOLINT
 {
-#if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
+#if defined(PLATFORM_OS_LINUX) || \
+    (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037) // Xcode 9.0 (installed on macOS 10.13 (High Sierra) on Travis CI)
     static constexpr unsigned int thread_count_variants[] = { 1, 2, 8 };
 #else
     static constexpr unsigned int thread_count_variants[] = { 1 };
@@ -624,7 +627,8 @@ TEST(Overthrower, StrategyStep) // NOLINT
 
 TEST(Overthrower, StrategyPulse) // NOLINT
 {
-#if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
+#if defined(PLATFORM_OS_LINUX) || \
+    (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037) // Xcode 9.0 (installed on macOS 10.13 (High Sierra) on Travis CI)
     static constexpr unsigned int thread_count_variants[] = { 1, 2, 8 };
 #else
     static constexpr unsigned int thread_count_variants[] = { 1 };
@@ -789,7 +793,8 @@ TEST(Overthrower, ThrowingException) // NOLINT
     EXPECT_GE(failure_count, iterations / 4);
 }
 
-#if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
+#if defined(PLATFORM_OS_LINUX) || \
+    (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037) // Xcode 9.0 (installed on macOS 10.13 (High Sierra) on Travis CI)
 // With Earlier Xcode versions std::thread constructor crashes instead of throwing an exception in OOM conditions
 TEST(Overthrower, CreatingThreads) // NOLINT
 {
