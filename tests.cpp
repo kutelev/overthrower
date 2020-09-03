@@ -1,6 +1,7 @@
 #include <atomic>
 #include <mutex>
 #include <numeric>
+#include <random>
 #include <thread>
 
 #include "platform.h"
@@ -24,6 +25,14 @@
 #define VERBOSE_ALL_ALLOCATIONS 2U
 
 static void* (*volatile forced_memset)(void*, int, size_t) = memset;
+
+static unsigned int randomNumber()
+{
+    static std::mt19937 random_number_engine; // NOLINT
+    static std::uniform_int_distribution< unsigned int > distribution;
+    static auto generateRandomNumber = std::bind(distribution, random_number_engine);
+    return generateRandomNumber();
+}
 
 GTEST_API_ int main(int argc, char** argv)
 {
@@ -118,10 +127,10 @@ public:
 protected:
     static void setParameterToInvalidValue(const char* name)
     {
-        if ((rand() % 4) != 0) {
+        if ((randomNumber() % 4U) != 0) {
             return;
         }
-        if ((rand() % 2) == 0) {
+        if ((randomNumber() % 2U) == 0) {
             setEnv(name, "123456789012345678901234567890"); // Enormously big value which will never fit into integer value.
         }
         else {
@@ -191,7 +200,7 @@ static std::string generateExpectedPattern(unsigned int strategy, unsigned int i
     return pattern;
 }
 
-TEST(ThreadLocal, Boolean)
+TEST(ThreadLocal, Boolean) // NOLINT
 {
     static constexpr unsigned int thread_count = 128;
 
@@ -220,18 +229,18 @@ TEST(ThreadLocal, Boolean)
         thread.join();
 }
 
-TEST(FragileCode, WithoutOverthrower)
+TEST(FragileCode, WithoutOverthrower) // NOLINT
 {
     fragileCode();
 }
 
-TEST(FragileCode, WithOverthrower)
+TEST(FragileCode, WithOverthrower) // NOLINT
 {
     OverthrowerConfiguratorRandom overthrower_configurator;
     EXPECT_DEATH(fragileCodeWithOverthrower(), "");
 }
 
-TEST(Overthrower, MemoryLeak)
+TEST(Overthrower, MemoryLeak) // NOLINT
 {
     OverthrowerConfiguratorNone overthrower_configurator;
     for (unsigned int block_count : { 1, 2, 3 }) {
@@ -247,7 +256,7 @@ TEST(Overthrower, MemoryLeak)
     }
 }
 
-TEST(Overthrower, DoubleActivation)
+TEST(Overthrower, DoubleActivation) // NOLINT
 {
     OverthrowerConfiguratorNone overthrower_configurator;
     activateOverthrower();
@@ -264,7 +273,7 @@ TEST(Overthrower, DoubleActivation)
     free(buffer);
 }
 
-TEST(Overthrower, DoubleDeactivation)
+TEST(Overthrower, DoubleDeactivation) // NOLINT
 {
     OverthrowerConfiguratorNone overthrower_configurator;
     activateOverthrower();
@@ -281,7 +290,7 @@ TEST(Overthrower, DoubleDeactivation)
     free(buffer);
 }
 
-TEST(Overthrower, Deactivation)
+TEST(Overthrower, Deactivation) // NOLINT
 {
     OverthrowerConfiguratorStep overthrower_configurator(0);
     activateOverthrower();
@@ -294,7 +303,7 @@ TEST(Overthrower, Deactivation)
     EXPECT_EQ(buffer, nullptr);
 }
 
-TEST(Overthrower, FreePreAllocated)
+TEST(Overthrower, FreePreAllocated) // NOLINT
 {
     void* buffer = malloc(128);
     forced_memset(buffer, 0, 128);
@@ -304,7 +313,7 @@ TEST(Overthrower, FreePreAllocated)
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
 
-TEST(Overthrower, LongTermPause)
+TEST(Overthrower, LongTermPause) // NOLINT
 {
     OverthrowerConfiguratorRandom overthrower_configurator;
     activateOverthrower();
@@ -335,7 +344,7 @@ static void validateShortPauseCorrectness()
     }
 }
 
-TEST(Overthrower, SingleThreadShortTermPause)
+TEST(Overthrower, SingleThreadShortTermPause) // NOLINT
 {
     OverthrowerConfiguratorStep overthrower_configurator(0);
     activateOverthrower();
@@ -345,7 +354,7 @@ TEST(Overthrower, SingleThreadShortTermPause)
 
 #if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
 // With Earlier Xcode versions std::thread constructor crashes instead of throwing an exception in OOM conditions
-TEST(Overthrower, MultipleThreadsShortTermPause)
+TEST(Overthrower, MultipleThreadsShortTermPause) // NOLINT
 {
     static constexpr unsigned int thread_count = 128;
 
@@ -366,7 +375,7 @@ TEST(Overthrower, MultipleThreadsShortTermPause)
 }
 #endif
 
-TEST(Overthrower, NestedPause)
+TEST(Overthrower, NestedPause) // NOLINT
 {
     static constexpr unsigned int max_recursive_depth = 4;
     static constexpr unsigned int max_depth = 16;
@@ -407,7 +416,7 @@ TEST(Overthrower, NestedPause)
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
 
-TEST(Overthrower, NestedPauseOverflowUnderflow)
+TEST(Overthrower, NestedPauseOverflowUnderflow) // NOLINT
 {
     static constexpr unsigned int max_depth = 128;
 
@@ -441,7 +450,7 @@ TEST(Overthrower, NestedPauseOverflowUnderflow)
     EXPECT_EQ(buffer2, nullptr);
 }
 
-TEST(Overthrower, PauseNotActivated)
+TEST(Overthrower, PauseNotActivated) // NOLINT
 {
     for (unsigned int i = 0U; i < 32U; ++i) {
         pauseOverthrower(1U);
@@ -458,7 +467,7 @@ TEST(Overthrower, PauseNotActivated)
     thread.join();
 }
 
-TEST(Overthrower, RandomParameters)
+TEST(Overthrower, RandomParameters) // NOLINT
 {
     constexpr unsigned int iteration_count = 128U;
     constexpr unsigned int allocation_count = 1024U;
@@ -501,7 +510,7 @@ TEST(Overthrower, RandomParameters)
     EXPECT_GT(strategy_random_pulse_times, 0U);
 }
 
-TEST(Overthrower, StrategyRandom)
+TEST(Overthrower, StrategyRandom) // NOLINT
 {
 #if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
     static constexpr unsigned int thread_count_variants[] = { 1, 2, 8 };
@@ -557,7 +566,7 @@ TEST(Overthrower, StrategyRandom)
     }
 }
 
-TEST(Overthrower, StrategyStep)
+TEST(Overthrower, StrategyStep) // NOLINT
 {
 #if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
     static constexpr unsigned int thread_count_variants[] = { 1, 2, 8 };
@@ -613,7 +622,7 @@ TEST(Overthrower, StrategyStep)
     }
 }
 
-TEST(Overthrower, StrategyPulse)
+TEST(Overthrower, StrategyPulse) // NOLINT
 {
 #if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
     static constexpr unsigned int thread_count_variants[] = { 1, 2, 8 };
@@ -672,7 +681,7 @@ TEST(Overthrower, StrategyPulse)
     }
 }
 
-TEST(Overthrower, StrategyNone)
+TEST(Overthrower, StrategyNone) // NOLINT
 {
     OverthrowerConfiguratorNone overthrower_configurator;
     activateOverthrower();
@@ -680,7 +689,7 @@ TEST(Overthrower, StrategyNone)
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
 
-TEST(Overthrower, SettingErrno)
+TEST(Overthrower, SettingErrno) // NOLINT
 {
     static const unsigned int iterations = 50;
     unsigned int failure_count = 0;
@@ -713,7 +722,7 @@ TEST(Overthrower, SettingErrno)
     EXPECT_GE(failure_count, iterations / 4);
 }
 
-TEST(Overthrower, PreservingErrnoWithoutOverthrower)
+TEST(Overthrower, PreservingErrnoWithoutOverthrower) // NOLINT
 {
     void* buffer = malloc(128);
     forced_memset(buffer, 0, 128);
@@ -722,7 +731,7 @@ TEST(Overthrower, PreservingErrnoWithoutOverthrower)
     EXPECT_EQ(errno, 100500);
 }
 
-TEST(Overthrower, PreservingErrnoWithOverthrower)
+TEST(Overthrower, PreservingErrnoWithOverthrower) // NOLINT
 {
     OverthrowerConfiguratorNone overthrower_configurator;
     activateOverthrower();
@@ -734,7 +743,7 @@ TEST(Overthrower, PreservingErrnoWithOverthrower)
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
 
-TEST(Overthrower, ThrowingException)
+TEST(Overthrower, ThrowingException) // NOLINT
 {
     class CustomException : public std::exception {
     public:
@@ -782,7 +791,7 @@ TEST(Overthrower, ThrowingException)
 
 #if defined(PLATFORM_OS_LINUX) || (defined(PLATFORM_OS_MAC_OS_X) && __apple_build_version__ >= 9000037)
 // With Earlier Xcode versions std::thread constructor crashes instead of throwing an exception in OOM conditions
-TEST(Overthrower, CreatingThreads)
+TEST(Overthrower, CreatingThreads) // NOLINT
 {
     static const unsigned int duty_cycle_variants[] = { 1, 2, 3, 5, 10, 20, 30, 50, 100 };
     static constexpr unsigned int thread_count = 128;
@@ -829,7 +838,7 @@ TEST(Overthrower, CreatingThreads)
 }
 #endif
 
-TEST(Overthrower, ReallocNonFailing)
+TEST(Overthrower, ReallocNonFailing) // NOLINT
 {
     static const size_t sizes[] = { 2,     4,     8,      16,     32,     64,      128,     256,     512,     1024,     2048,     4096,     8192,     16384,
                                     32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728 };
@@ -857,7 +866,7 @@ TEST(Overthrower, ReallocNonFailing)
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
 
-TEST(Overthrower, ReallocFailing)
+TEST(Overthrower, ReallocFailing) // NOLINT
 {
     static const size_t sizes[] = { 2,     4,     8,      16,     32,     64,      128,     256,     512,     1024,     2048,     4096,     8192,     16384,
                                     32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728 };
@@ -880,7 +889,7 @@ TEST(Overthrower, ReallocFailing)
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
 
-TEST(Overthrower, ReallocAllocate)
+TEST(Overthrower, ReallocAllocate) // NOLINT
 {
     OverthrowerConfiguratorNone overthrower_configurator;
     activateOverthrower();
@@ -904,7 +913,7 @@ TEST(Overthrower, ReallocAllocate)
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
 
-TEST(Overthrower, ReallocDeallocateWithoutOverthrower)
+TEST(Overthrower, ReallocDeallocateWithoutOverthrower) // NOLINT
 {
     void* buffer = realloc(nullptr, 128);
     ASSERT_NE(buffer, nullptr);
@@ -916,7 +925,7 @@ TEST(Overthrower, ReallocDeallocateWithoutOverthrower)
     ASSERT_EQ(buffer, nullptr);
 }
 
-TEST(Overthrower, ReallocDeallocateWithOverthrower)
+TEST(Overthrower, ReallocDeallocateWithOverthrower) // NOLINT
 {
     OverthrowerConfiguratorNone overthrower_configurator;
     activateOverthrower();
@@ -931,16 +940,16 @@ TEST(Overthrower, ReallocDeallocateWithOverthrower)
     EXPECT_EQ(deactivateOverthrower(), 0);
 }
 
-TEST(Overthrower, ReallocGrowShrink)
+TEST(Overthrower, ReallocGrowShrink) // NOLINT
 {
     constexpr unsigned int iteration_count = 128;
     constexpr size_t min_size = 128;
     constexpr size_t max_size = 1024;
 
-    size_t prev_size = min_size + (rand() % (max_size - min_size + 1));
+    size_t prev_size = min_size + (randomNumber() % (max_size - min_size + 1));
 
     std::vector<uint8_t> data(max_size);
-    std::generate_n(data.begin(), prev_size, []() { return rand() % 256; });
+    std::generate_n(data.begin(), prev_size, []() { return randomNumber() % 256U; });
 
     OverthrowerConfiguratorRandom overthrower_configurator(2);
     activateOverthrower();
@@ -951,7 +960,7 @@ TEST(Overthrower, ReallocGrowShrink)
     memcpy(buffer, &data[0], prev_size);
 
     for (unsigned int i = 0; i < iteration_count; ++i) {
-        const size_t new_size = min_size + (rand() % (max_size - min_size + 1));
+        const size_t new_size = min_size + (randomNumber() % (max_size - min_size + 1U));
         void* new_buffer = realloc(buffer, new_size);
         if (!new_buffer) {
             pauseOverthrower(0);
@@ -964,7 +973,7 @@ TEST(Overthrower, ReallocGrowShrink)
         EXPECT_EQ(memcmp(new_buffer, &data[0], std::min(prev_size, new_size)), 0);
         resumeOverthrower();
 
-        std::generate_n(data.begin(), new_size, []() { return rand() % 256; });
+        std::generate_n(data.begin(), new_size, []() { return randomNumber() % 256U; });
         memcpy(new_buffer, &data[0], new_size);
 
         prev_size = new_size;
@@ -979,13 +988,13 @@ TEST(Overthrower, ReallocGrowShrink)
 
 extern "C" void* somePureCFunction();
 
-TEST(Overthrower, PureC)
+TEST(Overthrower, PureC) // NOLINT
 {
     OverthrowerConfiguratorStep overthrower_configurator(0);
     ASSERT_EQ(somePureCFunction(), nullptr);
 }
 
-TEST(Overthrower, ImplicitDeactivation)
+TEST(Overthrower, ImplicitDeactivation) // NOLINT
 {
     auto subprocess = []() {
         OverthrowerConfiguratorNone overthrower_configurator;
@@ -1009,7 +1018,7 @@ static void exitFunction(void*)
     }
 }
 
-TEST(Overthrower, AtExit)
+TEST(Overthrower, AtExit) // NOLINT
 {
     auto subprocess = []() {
         OverthrowerConfiguratorStep overthrower_configurator(0);
@@ -1026,7 +1035,7 @@ TEST(Overthrower, AtExit)
 }
 
 #if defined(PLATFORM_OS_LINUX)
-TEST(Overthrower, DlError)
+TEST(Overthrower, DlError) // NOLINT
 {
     OverthrowerConfiguratorNone overthrower_configurator;
     activateOverthrower();
@@ -1040,7 +1049,7 @@ TEST(Overthrower, DlError)
 }
 #endif
 
-TEST(Overthrower, SelfOverthrow)
+TEST(Overthrower, SelfOverthrow) // NOLINT
 {
     constexpr unsigned int allocation_count = 16384U;
 
@@ -1064,7 +1073,7 @@ TEST(Overthrower, SelfOverthrow)
     EXPECT_GT(failure_count, allocation_count * 2U / 3U);
 }
 
-TEST(Overthrower, VerboseMode)
+TEST(Overthrower, VerboseMode) // NOLINT
 {
     constexpr unsigned int allocation_count = 16U;
 
