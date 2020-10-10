@@ -273,7 +273,7 @@ static unsigned int readValFromEnvVar(const char* env_var_name,
     return static_cast<unsigned int>(value);
 }
 
-extern "C" void activateOverthrower() noexcept
+extern "C" __attribute__((visibility("default"))) void activateOverthrower() noexcept
 {
 #if defined(PLATFORM_OS_MAC_OS_X)
     // Mac OS X implementation uses malloc inside printf generation of functions. If malloc fail, printf-like functions may crash.
@@ -317,7 +317,7 @@ extern "C" void activateOverthrower() noexcept
     g_activated = true;
 }
 
-extern "C" unsigned int deactivateOverthrower() noexcept
+extern "C" __attribute__((visibility("default"))) unsigned int deactivateOverthrower() noexcept
 {
     g_self_overthrow = false;
     g_activated = false;
@@ -343,7 +343,7 @@ extern "C" unsigned int deactivateOverthrower() noexcept
     return blocks_leaked;
 }
 
-extern "C" void pauseOverthrower(unsigned int duration) noexcept
+extern "C" __attribute__((visibility("default"))) void pauseOverthrower(unsigned int duration) noexcept
 {
 #if defined(PLATFORM_OS_MAC_OS_X)
     if (!g_initialized)
@@ -361,7 +361,7 @@ extern "C" void pauseOverthrower(unsigned int duration) noexcept
     g_state.paused[++g_state.depth] = duration;
 }
 
-extern "C" void resumeOverthrower() noexcept
+extern "C" __attribute__((visibility("default"))) void resumeOverthrower() noexcept
 {
     if (g_state.depth == 0) {
         fprintf(stderr, "pause stack underflow detected.\n");
@@ -566,6 +566,9 @@ __attribute__((noinline)) static void searchKnowledgeBase(bool& is_in_white_list
     is_in_ignore_list = check_result.second;
 }
 
+#if defined(PLATFORM_OS_LINUX)
+__attribute__((visibility("default")))
+#endif
 void* my_malloc(size_t size) noexcept
 {
 #if defined(PLATFORM_OS_MAC_OS_X)
@@ -653,6 +656,9 @@ void* my_malloc(size_t size) noexcept
     return pointer;
 }
 
+#if defined(PLATFORM_OS_LINUX)
+__attribute__((visibility("default")))
+#endif
 void my_free(void* pointer) noexcept
 {
     const int old_errno = errno;
@@ -665,6 +671,9 @@ void my_free(void* pointer) noexcept
     errno = old_errno;
 }
 
+#if defined(PLATFORM_OS_LINUX)
+__attribute__((visibility("default")))
+#endif
 void* my_realloc(void* pointer, size_t size) noexcept
 {
     if (!pointer)
