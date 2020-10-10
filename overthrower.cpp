@@ -73,8 +73,8 @@ static Free native_free = nullptr;
 #define native_realloc native_realloc
 #endif
 
-void* nonFailingMalloc(size_t size);
-void nonFailingFree(void* pointer);
+void* nonFailingMalloc(size_t size) noexcept;
+void nonFailingFree(void* pointer) noexcept;
 
 enum {
     STRATEGY_RANDOM = 0U,
@@ -165,18 +165,18 @@ public:
         return temp;
     }
 
-    void deallocate(pointer p, size_type) { nonFailingFree(p); }
+    void deallocate(pointer p, size_type) noexcept { nonFailingFree(p); }
 
     void construct(pointer p, const T& val) { new (reinterpret_cast<void*>(p)) T(val); }
-    void destroy(pointer p) { p->~T(); }
+    void destroy(pointer p) noexcept { p->~T(); }
 };
 
 static std::recursive_mutex g_mutex;                                                                                                           // NOLINT
 static std::unordered_map<void*, Info, std::hash<void*>, std::equal_to<void*>, mallocFreeAllocator<std::pair<void* const, Info>>> g_allocated; // NOLINT
 
-extern "C" unsigned int deactivateOverthrower();
+extern "C" unsigned int deactivateOverthrower() noexcept;
 
-static void initialize()
+static void initialize() noexcept
 {
     assert(!g_initialized);
 #if defined(PLATFORM_OS_MAC_OS_X)
@@ -191,13 +191,13 @@ static void initialize()
     g_initialized = true;
 }
 
-__attribute__((constructor, used)) static void banner()
+__attribute__((constructor, used)) static void banner() noexcept
 {
     fprintf(stderr, "overthrower is waiting for the activation signal ...\n");
     fprintf(stderr, "Invoke activateOverthrower and overthrower will start his job.\n");
 }
 
-__attribute__((destructor, used)) static void shutdown()
+__attribute__((destructor, used)) static void shutdown() noexcept
 {
     if (!g_activated)
         return;
@@ -207,7 +207,7 @@ __attribute__((destructor, used)) static void shutdown()
     deactivateOverthrower();
 }
 
-static int strToUnsignedLongInt(const char* str, unsigned long int* value)
+static int strToUnsignedLongInt(const char* str, unsigned long int* value) noexcept
 {
     char* end_ptr;
     *value = strtoul(str, &end_ptr, 10);
@@ -221,7 +221,7 @@ static int strToUnsignedLongInt(const char* str, unsigned long int* value)
     return 0;
 }
 
-static unsigned int generateRandomValue(const unsigned int min_val, const unsigned int max_val)
+static unsigned int generateRandomValue(const unsigned int min_val, const unsigned int max_val) noexcept
 {
     unsigned int value = (min_val + max_val) / 2;
     FILE* file = fopen("/dev/urandom", "rb");
@@ -243,7 +243,7 @@ static unsigned int readValFromEnvVar(const char* env_var_name,
                                       unsigned int min_val,
                                       unsigned int max_val,
                                       unsigned int max_random_val = 0,
-                                      unsigned int default_value = UINT_MAX)
+                                      unsigned int default_value = UINT_MAX) noexcept
 {
     const char* env_var_val = getenv(env_var_name);
     unsigned long int value;
@@ -273,7 +273,7 @@ static unsigned int readValFromEnvVar(const char* env_var_name,
     return static_cast<unsigned int>(value);
 }
 
-extern "C" void activateOverthrower()
+extern "C" void activateOverthrower() noexcept
 {
 #if defined(PLATFORM_OS_MAC_OS_X)
     // Mac OS X implementation uses malloc inside printf generation of functions. If malloc fail, printf-like functions may crash.
@@ -317,7 +317,7 @@ extern "C" void activateOverthrower()
     g_activated = true;
 }
 
-extern "C" unsigned int deactivateOverthrower()
+extern "C" unsigned int deactivateOverthrower() noexcept
 {
     g_self_overthrow = false;
     g_activated = false;
@@ -343,7 +343,7 @@ extern "C" unsigned int deactivateOverthrower()
     return blocks_leaked;
 }
 
-extern "C" void pauseOverthrower(unsigned int duration)
+extern "C" void pauseOverthrower(unsigned int duration) noexcept
 {
 #if defined(PLATFORM_OS_MAC_OS_X)
     if (!g_initialized)
@@ -361,7 +361,7 @@ extern "C" void pauseOverthrower(unsigned int duration)
     g_state.paused[++g_state.depth] = duration;
 }
 
-extern "C" void resumeOverthrower()
+extern "C" void resumeOverthrower() noexcept
 {
     if (g_state.depth == 0) {
         fprintf(stderr, "pause stack underflow detected.\n");
@@ -371,7 +371,7 @@ extern "C" void resumeOverthrower()
     --g_state.depth;
 }
 
-static bool isTimeToFail(unsigned int malloc_seq_num)
+static bool isTimeToFail(unsigned int malloc_seq_num) noexcept
 {
     switch (g_strategy) {
         case STRATEGY_RANDOM:
@@ -386,7 +386,7 @@ static bool isTimeToFail(unsigned int malloc_seq_num)
     }
 }
 
-void* nonFailingMalloc(size_t size)
+void* nonFailingMalloc(size_t size) noexcept
 {
     if (g_self_overthrow && (rand() % 2) == 0) {
         // By doing this we emulate real OOM conditions where native malloc can really return nullptr.
@@ -401,7 +401,7 @@ void* nonFailingMalloc(size_t size)
 #endif
 }
 
-void nonFailingFree(void* pointer)
+void nonFailingFree(void* pointer) noexcept
 {
     native_free(pointer);
 }
@@ -413,7 +413,12 @@ typedef std::pair<bool, bool> (
 #if defined(WITH_LIBUNWIND)
 // ip - instruction pointer
 // sp - stack pointer
-static std::pair<bool, bool> printFrameInfo(unsigned int depth, uintptr_t ip, uintptr_t sp, const char* library_name, const char* func_name, uintptr_t off)
+static std::pair<bool, bool> printFrameInfo(unsigned int depth,
+                                            uintptr_t ip,
+                                            uintptr_t sp,
+                                            const char* library_name,
+                                            const char* func_name,
+                                            uintptr_t off) noexcept
 {
     fprintf(stderr, "#%-2u 0x%016" PRIxPTR " sp=0x%016" PRIxPTR " %s - %s + 0x%" PRIxPTR "\n", depth, ip, sp, library_name, func_name, off);
 #else
@@ -425,7 +430,7 @@ static std::pair<bool, bool> printFrameInfo(unsigned int depth, uintptr_t, uintp
     return std::make_pair(false, false);
 }
 
-__attribute__((noinline)) static std::pair<bool, bool> traverseStack(BacktraceCallback callback)
+__attribute__((noinline)) static std::pair<bool, bool> traverseStack(BacktraceCallback callback) noexcept
 {
 #if defined(WITH_LIBUNWIND)
     unw_cursor_t cursor;
@@ -516,7 +521,7 @@ __attribute__((noinline)) static std::pair<bool, bool> traverseStack(BacktraceCa
 }
 
 #if defined(PLATFORM_OS_MAC_OS_X)
-__attribute__((noinline)) static std::pair<bool, bool> checker(unsigned int depth, uintptr_t, uintptr_t, const char*, const char* func_name, uintptr_t)
+__attribute__((noinline)) static std::pair<bool, bool> checker(unsigned int depth, uintptr_t, uintptr_t, const char*, const char* func_name, uintptr_t) noexcept
 {
     if ((depth == 3 || depth == 4) && strstr(func_name, "__cxa_allocate_exception")) {
         // This branch is reachable with macOS 10.14 / Xcode 10 and older.
@@ -534,7 +539,7 @@ __attribute__((noinline)) static std::pair<bool, bool> checker(unsigned int dept
     return std::make_pair(false, false);
 }
 #elif defined(PLATFORM_OS_LINUX)
-static std::pair<bool, bool> checker(unsigned int depth, uintptr_t, uintptr_t, const char*, const char* func_name, uintptr_t)
+static std::pair<bool, bool> checker(unsigned int depth, uintptr_t, uintptr_t, const char*, const char* func_name, uintptr_t) noexcept
 {
     if ((depth == 2 || depth == 3) && strstr(func_name, "__cxa_allocate_exception")) {
         return std::make_pair(true, false);
@@ -554,14 +559,14 @@ static std::pair<bool, bool> checker(unsigned int depth, uintptr_t, uintptr_t, c
 }
 #endif
 
-__attribute__((noinline)) static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list)
+__attribute__((noinline)) static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list) noexcept
 {
     const auto check_result = traverseStack(checker);
     is_in_white_list = check_result.first;
     is_in_ignore_list = check_result.second;
 }
 
-void* my_malloc(size_t size)
+void* my_malloc(size_t size) noexcept
 {
 #if defined(PLATFORM_OS_MAC_OS_X)
     if (g_initializing)
@@ -648,7 +653,7 @@ void* my_malloc(size_t size)
     return pointer;
 }
 
-void my_free(void* pointer)
+void my_free(void* pointer) noexcept
 {
     const int old_errno = errno;
     if (g_activated && pointer) {
@@ -660,7 +665,7 @@ void my_free(void* pointer)
     errno = old_errno;
 }
 
-void* my_realloc(void* pointer, size_t size)
+void* my_realloc(void* pointer, size_t size) noexcept
 {
     if (!pointer)
         return my_malloc(size);

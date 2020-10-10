@@ -10,7 +10,7 @@ class ThreadLocal final {
     static_assert(sizeof(T) <= sizeof(uintptr_t), "Inappropriate data type");
 
 public:
-    ThreadLocal()
+    ThreadLocal() noexcept
     {
         // Theoretically pthread_key_create can fail but if this happens on this early stage there is nothing we can do to handle this.
         // Considering failed pthread_key_create invocations as disastrous cases and doing nothing regarding this.
@@ -18,16 +18,17 @@ public:
     }
     ~ThreadLocal() { pthread_key_delete(key); }
 
-    ThreadLocal& operator=(T value)
+    ThreadLocal& operator=(T value) noexcept
     {
         set(value);
         return *this;
     }
-    operator T() const { return get(); }
+    bool operator==(bool other) const noexcept { return this->operator bool() == other; }
+    explicit operator bool() const noexcept { return static_cast<bool>(get()); }
 
 private:
-    void set(const T value) { pthread_setspecific(key, reinterpret_cast<void*>(value)); }
-    T get() const { return (T)(pthread_getspecific(key)); }
+    void set(const T value) noexcept { pthread_setspecific(key, reinterpret_cast<void*>(value)); }
+    T get() const noexcept { return (T)(pthread_getspecific(key)); }
 
     pthread_key_t key{};
 };
