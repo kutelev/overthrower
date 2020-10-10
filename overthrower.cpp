@@ -375,7 +375,7 @@ static bool isTimeToFail(unsigned int malloc_seq_num) noexcept
 {
     switch (g_strategy) {
         case STRATEGY_RANDOM:
-            return rand() % g_duty_cycle == 0;
+            return rand() % g_duty_cycle == 0; // NOLINT
         case STRATEGY_STEP:
             return malloc_seq_num >= g_delay;
         case STRATEGY_PULSE:
@@ -388,7 +388,7 @@ static bool isTimeToFail(unsigned int malloc_seq_num) noexcept
 
 void* nonFailingMalloc(size_t size) noexcept
 {
-    if (g_self_overthrow && (rand() % 2) == 0) {
+    if (g_self_overthrow && (rand() % 2) == 0) { // NOLINT
         // By doing this we emulate real OOM conditions where native malloc can really return nullptr.
         // This may happen if tests are run on a system which is running out of resources.
         return nullptr;
