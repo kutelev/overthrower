@@ -1,3 +1,4 @@
+#include <climits>
 #if !defined(_GNU_SOURCE)
 #define _GNU_SOURCE
 #endif
@@ -134,12 +135,15 @@ struct Info {
 template<class T>
 class mallocFreeAllocator {
 public:
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "OCUnusedGlobalDeclarationInspection"
     typedef size_t size_type;
     typedef T* pointer;
-    typedef const T* const_pointer;
+    typedef const T* const_pointer; // This is falsely detected as unused.
     typedef T& reference;
-    typedef const T& const_reference;
-    typedef T value_type;
+    typedef const T& const_reference; // This is falsely detected as unused.
+    typedef T value_type;             // This is falsely detected as unused.
+#pragma clang diagnostic pop
 
     template<class U>
     struct rebind {
@@ -168,7 +172,10 @@ public:
     void deallocate(pointer p, size_type) noexcept { nonFailingFree(p); }
 
     void construct(pointer p, const T& val) { new (reinterpret_cast<void*>(p)) T(val); }
-    void destroy(pointer p) noexcept { p->~T(); }
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "OCUnusedGlobalDeclarationInspection"
+    void destroy(pointer p) noexcept { p->~T(); } // This is falsely detected as unused.
+#pragma clang diagnostic pop
 };
 
 static std::recursive_mutex g_mutex;                                                                                                           // NOLINT
