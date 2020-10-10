@@ -566,6 +566,11 @@ static std::pair<bool, bool> checker(unsigned int depth, uintptr_t, uintptr_t, c
 }
 #endif
 
+// overthrower internal logic requires call stack depth to be deterministic,
+// function "checker" (which is implemented above) will not work correctly if this requirement is not satisfied.
+// Compilers may decide that the function "searchKnowledgeBase" is way too simple and inline it,
+// this will break expectations and prevent overthrower from working correctly.
+// In order to prevent compilers from inlining "searchKnowledgeBase" we use "__attribute__((noinline))".
 __attribute__((noinline)) static void searchKnowledgeBase(bool& is_in_white_list, bool& is_in_ignore_list) noexcept
 {
     const auto check_result = traverseStack(checker);
