@@ -554,6 +554,12 @@ static std::pair<bool, bool> checker(unsigned int depth, uintptr_t, uintptr_t, c
     if (depth == 3 && strstr(func_name, "ld-linux")) {
         return std::make_pair(false, true);
     }
+    if (depth == 5 && strstr(func_name, "_dl_catch_exception")) {
+        return std::make_pair(false, true);
+    }
+    if (depth == 2 && (strstr(func_name, "_dl_signal_error") || strstr(func_name, "_dl_exception_create") )) {
+        return std::make_pair(true, true);
+    }
     if ((depth == 4 || depth == 5) && strstr(func_name, "dlerror")) {
         return std::make_pair(false, true);
     }
