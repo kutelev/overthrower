@@ -651,8 +651,7 @@ void* my_malloc(size_t size) noexcept
         // All registered and not freed memory blocks are considered to be memory leaks.
         try {
             std::lock_guard<std::recursive_mutex> lock(g_mutex);
-            // Maybe I should have used emplace instead of insert but it is not possible due to incapability of GCC 4.8 dealing with it
-            g_allocated.insert({ pointer, { malloc_seq_num, size } });
+            g_allocated.emplace(pointer, Info{ malloc_seq_num, size });
         }
         catch (const std::bad_alloc&) {
             // Real OOM

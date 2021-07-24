@@ -9,35 +9,14 @@ env:
 matrix:
   include:
     - os: linux
-      dist: trusty
-    - os: linux
       dist: xenial
-    - os: linux
-      dist: bionic
-    - os: linux
-      dist: focal
     - os: linux
       dist: bionic
     - os: linux
       dist: focal
 
     - os: linux
-      dist: trusty
-      env:
-        - USE_LIBUNWIND=1
-        - MEASURE_COVERAGE=1
-    - os: linux
       dist: xenial
-      env:
-        - USE_LIBUNWIND=1
-        - MEASURE_COVERAGE=1
-    - os: linux
-      dist: bionic
-      env:
-        - USE_LIBUNWIND=1
-        - MEASURE_COVERAGE=1
-    - os: linux
-      dist: focal
       env:
         - USE_LIBUNWIND=1
         - MEASURE_COVERAGE=1
