@@ -28,7 +28,6 @@
 #endif
 
 #include <mutex>
-#include <new>
 #include <unordered_map>
 
 #if defined(PLATFORM_OS_MAC_OS_X)
@@ -120,8 +119,8 @@ struct State {
 static thread_local State g_state{};
 
 #if defined(PLATFORM_OS_MAC_OS_X)
-static ThreadLocal<bool> g_initialized;  // NOLINT
-static ThreadLocal<bool> g_initializing; // NOLINT
+static ThreadLocal<bool> g_initialized;
+static ThreadLocal<bool> g_initializing;
 #elif defined(PLATFORM_OS_LINUX)
 static bool g_initialized;
 #endif
@@ -134,20 +133,14 @@ struct Info {
 template<class T>
 class mallocFreeAllocator {
 public:
-#pragma clang diagnostic push
-#pragma ide diagnostic ignored "OCUnusedGlobalDeclarationInspection"
     typedef size_t size_type;
     typedef T* pointer;
-    typedef const T* const_pointer; // This is falsely detected as unused.
     typedef T& reference;
-    typedef const T& const_reference; // This is falsely detected as unused.
-    typedef T value_type;             // This is falsely detected as unused.
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "OCUnusedGlobalDeclarationInspection"
+    // This is falsely detected as unused.
+    typedef T value_type;
 #pragma clang diagnostic pop
-
-    template<class U>
-    struct rebind {
-        typedef mallocFreeAllocator<U> other;
-    };
 
     mallocFreeAllocator() noexcept = default;
 
@@ -161,20 +154,20 @@ public:
     pointer allocate(size_type size)
     {
         assert(size > 0); // Do not expect STL containers to allocate memory blocks having no size.
-        auto temp = reinterpret_cast<pointer>(nonFailingMalloc(size * sizeof(T)));
+        auto temp = reinterpret_cast<pointer>(nonFailingMalloc(size * sizeof(T))); // NOLINT(bugprone-sizeof-expression)
         if (!temp) {
             throw std::bad_alloc(); // Real OOM
         }
         return temp;
     }
 
-    void deallocate(pointer p, size_type) noexcept { nonFailingFree(p); }
-
-    void construct(pointer p, const T& val) { new (reinterpret_cast<void*>(p)) T(val); }
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "OCUnusedGlobalDeclarationInspection"
-    void destroy(pointer p) noexcept { p->~T(); } // This is falsely detected as unused.
+    // This is falsely detected as unused.
+    void deallocate(pointer p, size_type) noexcept { nonFailingFree(p); }
 #pragma clang diagnostic pop
+
+    void construct(pointer p, const T& val) { new (reinterpret_cast<void*>(p)) T(val); }
 };
 
 static std::recursive_mutex g_mutex;                                                                                                           // NOLINT
@@ -556,7 +549,7 @@ static std::pair<bool, bool> checker(unsigned int depth, uintptr_t, uintptr_t, c
     if (depth == 5 && strstr(func_name, "_dl_catch_exception")) {
         return std::make_pair(false, true);
     }
-    if (depth == 2 && (strstr(func_name, "_dl_signal_error") || strstr(func_name, "_dl_exception_create") )) {
+    if (depth == 2 && (strstr(func_name, "_dl_signal_error") || strstr(func_name, "_dl_exception_create"))) {
         return std::make_pair(true, true);
     }
     if ((depth == 4 || depth == 5) && strstr(func_name, "dlerror")) {
