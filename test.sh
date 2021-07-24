@@ -32,24 +32,22 @@ fi
 build_tests default Release
 execute_tests
 
-if [[ "${MEASURE_COVERAGE}" == "1" ]]; then
-  export CMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping"
-  export CMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping"
-  export CMAKE_BUILD_TYPE=Debug
-  if [[ "$(uname)" == "Linux" ]]; then
-    export OVERTHROWER_LIBRARY_PATH=./liboverthrower.so
-    export LLVM_PROFDATA=llvm-profdata
-    export LLVM_COV=llvm-cov
-    export CC=clang
-    export CXX=clang++
-  elif [[ "$(uname)" == "Darwin" ]]; then
-    export OVERTHROWER_LIBRARY_PATH=./Frameworks/overthrower.framework/Versions/Current/overthrower
-    export LLVM_PROFDATA="xcrun llvm-profdata"
-    export LLVM_COV="xcrun llvm-cov"
-  fi
-  build_tests coverage Debug
-  execute_tests
-  ${LLVM_PROFDATA} merge -sparse default.profraw -o default.profdata
-  ${LLVM_COV} show ${OVERTHROWER_LIBRARY_PATH} -instr-profile=default.profdata -Xdemangler=c++filt
-  ${LLVM_COV} report ${OVERTHROWER_LIBRARY_PATH} -instr-profile=default.profdata
+export CMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping"
+export CMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping"
+export CMAKE_BUILD_TYPE=Debug
+if [[ "$(uname)" == "Linux" ]]; then
+  export OVERTHROWER_LIBRARY_PATH=./liboverthrower.so
+  export LLVM_PROFDATA=llvm-profdata
+  export LLVM_COV=llvm-cov
+  export CC=clang
+  export CXX=clang++
+elif [[ "$(uname)" == "Darwin" ]]; then
+  export OVERTHROWER_LIBRARY_PATH=./Frameworks/overthrower.framework/Versions/Current/overthrower
+  export LLVM_PROFDATA="xcrun llvm-profdata"
+  export LLVM_COV="xcrun llvm-cov"
 fi
+build_tests coverage Debug
+execute_tests
+${LLVM_PROFDATA} merge -sparse default.profraw -o default.profdata
+${LLVM_COV} show ${OVERTHROWER_LIBRARY_PATH} -instr-profile=default.profdata -Xdemangler=c++filt
+${LLVM_COV} report ${OVERTHROWER_LIBRARY_PATH} -instr-profile=default.profdata
