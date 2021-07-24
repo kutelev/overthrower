@@ -8,7 +8,7 @@ elif [[ "$(uname)" == "Darwin" ]]; then
   SOURCE_DIR="$(dirname "$(realpath "$0")")"
   export SOURCE_DIR=${SOURCE_DIR}
 fi
-export BUILD_DIR=${TRAVIS_BUILD_DIR:-$(pwd)}
+export BUILD_DIR=${APPVEYOR_BUILD_FOLDER:-$(pwd)}
 
 build_tests() {
   mkdir -p "${BUILD_DIR}/$1"
@@ -29,6 +29,15 @@ if [[ ! -d "${SOURCE_DIR}/googletest" ]]; then
   git clone --branch release-1.11.0 --depth 1 https://github.com/google/googletest.git "${SOURCE_DIR}/googletest"
 fi
 
+if [[ "$(uname)" == "Linux" ]]; then
+  if [[ -n "${GCC_VERSION}" ]]; then
+    export CC="gcc-${GCC_VERSION}"
+    export CXX="g++-${GCC_VERSION}"
+  else
+    export CC="gcc"
+    export CXX="g++"
+  fi
+fi
 build_tests default Release
 execute_tests
 
@@ -37,8 +46,8 @@ export CMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping"
 export CMAKE_BUILD_TYPE=Debug
 if [[ "$(uname)" == "Linux" ]]; then
   export OVERTHROWER_LIBRARY_PATH=./liboverthrower.so
-  export LLVM_PROFDATA=llvm-profdata
-  export LLVM_COV=llvm-cov
+  export LLVM_PROFDATA=llvm-profdata-10
+  export LLVM_COV=llvm-cov-10
   export CC=clang
   export CXX=clang++
 elif [[ "$(uname)" == "Darwin" ]]; then

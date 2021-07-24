@@ -1,6 +1,6 @@
 # Overthrower
 
-[![Build Status](https://travis-ci.com/kutelev/overthrower.svg?branch=master)](https://travis-ci.com/kutelev/overthrower)
+[![Build status](https://ci.appveyor.com/api/projects/status/0nvvreoe3ftw2cq3/branch/master?svg=true)](https://ci.appveyor.com/project/kutelev/overthrower/branch/master)
 
 Overthrower is a library which capable of intercepting `malloc`/`realloc` invocations and fail them based on a chosen pattern.
 
