@@ -1,7 +1,7 @@
 if(NOT EXISTS "${CMAKE_BINARY_DIR}/libunwind")
     execute_process(
         COMMAND
-            git clone -b v1.4.0 --depth 1 https://github.com/libunwind/libunwind.git libunwind
+            git clone -b v1.5 --depth 1 https://github.com/libunwind/libunwind.git libunwind
         WORKING_DIRECTORY
             "${CMAKE_BINARY_DIR}"
         RESULT_VARIABLE
