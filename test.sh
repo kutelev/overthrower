@@ -26,7 +26,7 @@ execute_tests() {
 }
 
 if [[ ! -d "${SOURCE_DIR}/googletest" ]]; then
-  git clone --branch release-1.10.0 --depth 1 https://github.com/google/googletest.git "${SOURCE_DIR}/googletest"
+  git clone --branch release-1.11.0 --depth 1 https://github.com/google/googletest.git "${SOURCE_DIR}/googletest"
 fi
 
 build_tests default Release
