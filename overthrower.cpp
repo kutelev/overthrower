@@ -153,7 +153,7 @@ public:
 
     pointer allocate(size_type size)
     {
-        assert(size > 0); // Do not expect STL containers to allocate memory blocks having no size.
+        assert(size > 0);                                                          // Do not expect STL containers to allocate memory blocks having no size.
         auto temp = reinterpret_cast<pointer>(nonFailingMalloc(size * sizeof(T))); // NOLINT(bugprone-sizeof-expression)
         if (!temp) {
             throw std::bad_alloc(); // Real OOM
@@ -676,7 +676,16 @@ void my_free(void* pointer) noexcept
         g_allocated.erase(pointer);
     }
 
-    native_free(pointer);
+#if defined(PLATFORM_OS_LINUX)
+    // Some weird runtimes may invoke `free(NULL)` before doing any allocations using `malloc`.
+    // `native_free` is initialized at first `malloc` invocation only on Linux.
+    // Let it crash if `native_free` is `nullptr` but `pointer` is not.
+    if (native_free || pointer) {
+#endif
+        native_free(pointer);
+#if defined(PLATFORM_OS_LINUX)
+    }
+#endif
     errno = old_errno;
 }
 
