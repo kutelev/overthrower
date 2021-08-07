@@ -19,8 +19,10 @@ build_tests() {
 
 execute_tests() {
   if [[ "$(uname)" == "Linux" ]]; then
+    LD_LIBRARY_PATH=. LD_PRELOAD=liboverthrower.so ./overthrower_free_null
     LD_LIBRARY_PATH=. LD_PRELOAD=liboverthrower.so ./overthrower_tests
   elif [[ "$(uname)" == "Darwin" ]]; then
+    DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=./Frameworks/overthrower.framework/Versions/Current/overthrower ./overthrower_free_null
     DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=./Frameworks/overthrower.framework/Versions/Current/overthrower ./overthrower_tests
   fi
 }

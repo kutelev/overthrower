@@ -122,7 +122,7 @@ static thread_local State g_state{};
 static ThreadLocal<bool> g_initialized;
 static ThreadLocal<bool> g_initializing;
 #elif defined(PLATFORM_OS_LINUX)
-static bool g_initialized;
+static bool g_initialized = false;
 #endif
 
 struct Info {
@@ -670,23 +670,22 @@ __attribute__((visibility("default")))
 #endif
 void my_free(void* pointer) noexcept
 {
-    const int old_errno = errno;
-    if (g_activated && pointer) {
-        std::lock_guard<std::recursive_mutex> lock(g_mutex);
-        g_allocated.erase(pointer);
+    if (!pointer) {
+        // Standard `free` is supposed to do nothing when `NULL` is tried to be freed.
+        // Invoking `native_free(NULL)` at this point may be potentially disastrous, because `native_free` can be `NULL`.
+        // `native_free` on Linux is initialized only on first `malloc` invocation.
+        // If `free(NULL)` is invoked before any allocations are done using `malloc`, `native_free` is still pointing to `NULL` and can not be invoked.
+        return;
     }
 
-#if defined(PLATFORM_OS_LINUX)
-    // Some weird runtimes may invoke `free(NULL)` before doing any allocations using `malloc`.
-    // `native_free` is initialized at first `malloc` invocation only on Linux.
-    // Let it crash if `native_free` is `nullptr` but `pointer` is not.
-    if (native_free || pointer) {
-#endif
-        native_free(pointer);
-#if defined(PLATFORM_OS_LINUX)
+    if (g_activated) {
+        const int old_errno = errno;
+        std::lock_guard<std::recursive_mutex> lock(g_mutex);
+        g_allocated.erase(pointer);
+        errno = old_errno;
     }
-#endif
-    errno = old_errno;
+
+    native_free(pointer);
 }
 
 #if defined(PLATFORM_OS_LINUX)
