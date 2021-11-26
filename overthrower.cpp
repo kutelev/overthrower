@@ -209,6 +209,7 @@ __attribute__((destructor, used)) static void shutdown() noexcept
 static int strToUnsignedLongInt(const char* str, unsigned long int* value) noexcept
 {
     char* end_ptr;
+    errno = 0;
     *value = strtoul(str, &end_ptr, 10);
 
     if (end_ptr[0] != '\0')
