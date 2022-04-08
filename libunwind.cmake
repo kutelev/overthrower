@@ -1,50 +1,50 @@
-if(NOT EXISTS "${CMAKE_BINARY_DIR}/libunwind")
+if(NOT EXISTS "${CMAKE_BINARY_DIR}-libunwind")
     execute_process(
         COMMAND
-            git clone -b v1.5 --depth 1 https://github.com/libunwind/libunwind.git libunwind
+            git clone -b v1.5 --depth 1 https://github.com/libunwind/libunwind.git ${CMAKE_BINARY_DIR}-libunwind
         WORKING_DIRECTORY
             "${CMAKE_BINARY_DIR}"
         RESULT_VARIABLE
             RET_CODE
     )
     if(NOT "${RET_CODE}" STREQUAL "0")
-        file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}/libunwind")
+        file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}-libunwind")
         message(FATAL_ERROR "Failed to clone libunwind")
     endif()
     execute_process(
         COMMAND
             ./autogen.sh
         WORKING_DIRECTORY
-            "${CMAKE_BINARY_DIR}/libunwind"
+            "${CMAKE_BINARY_DIR}-libunwind"
         RESULT_VARIABLE
             RET_CODE
     )
     if(NOT "${RET_CODE}" STREQUAL "0")
-        file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}/libunwind")
+        file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}-libunwind")
         message(FATAL_ERROR "Failed to configure libunwind")
     endif()
     execute_process(
         COMMAND
             ./configure CFLAGS=-fPIC CXXFLAGS=-fPIC
         WORKING_DIRECTORY
-            "${CMAKE_BINARY_DIR}/libunwind"
+            "${CMAKE_BINARY_DIR}-libunwind"
         RESULT_VARIABLE
             RET_CODE
     )
     if(NOT "${RET_CODE}" STREQUAL "0")
-        file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}/libunwind")
+        file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}-libunwind")
         message(FATAL_ERROR "Failed to configure libunwind")
     endif()
     execute_process(
         COMMAND
-            make install prefix="${CMAKE_BINARY_DIR}/libunwind/usr/local"
+            make install prefix="${CMAKE_BINARY_DIR}-libunwind/usr/local"
         WORKING_DIRECTORY
-            "${CMAKE_BINARY_DIR}/libunwind"
+            "${CMAKE_BINARY_DIR}-libunwind"
         RESULT_VARIABLE
             RET_CODE
     )
     if(NOT "${RET_CODE}" STREQUAL "0")
-        file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}/libunwind")
+        file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}-libunwind")
         message(FATAL_ERROR "Failed to build libunwind")
     endif()
 endif()
@@ -54,9 +54,9 @@ set_target_properties(
     unwind
     PROPERTIES
         INTERFACE_INCLUDE_DIRECTORIES
-            "${CMAKE_BINARY_DIR}/libunwind/include"
+            "${CMAKE_BINARY_DIR}-libunwind/include"
         IMPORTED_LOCATION
-            "${CMAKE_BINARY_DIR}/libunwind/usr/local/lib/libunwind.a"
+            "${CMAKE_BINARY_DIR}-libunwind/usr/local/lib/libunwind.a"
         INTERFACE_LINK_LIBRARIES
-            "${CMAKE_BINARY_DIR}/libunwind/usr/local/lib/libunwind-x86_64.a"
+            "${CMAKE_BINARY_DIR}-libunwind/usr/local/lib/libunwind-x86_64.a"
 )
