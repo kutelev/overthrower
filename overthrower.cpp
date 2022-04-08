@@ -39,7 +39,7 @@
 #endif
 
 #if defined(PLATFORM_OS_LINUX)
-#define MAX_STACK_DEPTH 6
+#define MAX_STACK_DEPTH 7
 #elif defined(PLATFORM_OS_MAC_OS_X)
 #define MAX_STACK_DEPTH 5
 #endif
@@ -164,10 +164,16 @@ public:
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "OCUnusedGlobalDeclarationInspection"
     // This is falsely detected as unused.
-    void deallocate(pointer p, size_type) noexcept { nonFailingFree(p); }
+    void deallocate(pointer p, size_type) noexcept
+    {
+        nonFailingFree(p);
+    }
 #pragma clang diagnostic pop
 
-    void construct(pointer p, const T& val) { new (reinterpret_cast<void*>(p)) T(val); }
+    void construct(pointer p, const T& val)
+    {
+        new (reinterpret_cast<void*>(p)) T(val);
+    }
 };
 
 static std::recursive_mutex g_mutex;                                                                                                           // NOLINT
@@ -541,22 +547,33 @@ __attribute__((noinline)) static std::pair<bool, bool> checker(unsigned int dept
 #elif defined(PLATFORM_OS_LINUX)
 static std::pair<bool, bool> checker(unsigned int depth, uintptr_t, uintptr_t, const char*, const char* func_name, uintptr_t) noexcept
 {
-    if ((depth == 2 || depth == 3) && strstr(func_name, "__cxa_allocate_exception")) {
+    static const auto compareFuncName = [](const char* a, const char* b) {
+#if defined(WITH_LIBUNWIND)
+        return strcmp(a, b) == 0;
+#else
+        return strstr(a, b) != nullptr;
+#endif
+    };
+
+    if ((depth == 2 || depth == 3) && (compareFuncName(func_name, "__cxa_allocate_exception"))) {
         return std::make_pair(true, false);
     }
-    if (depth == 3 && strstr(func_name, "ld-linux")) {
+    if (compareFuncName(func_name, "_dl_map_object") || compareFuncName(func_name, "_dl_map_object_deps")) {
+        // These two functions tend to leak, especially in OOM conditions.
+        // https://sourceware.org/bugzilla/show_bug.cgi?id=2451
+        // https://sourceware.org/legacy-ml/libc-alpha/2013-09/msg00150.html
         return std::make_pair(false, true);
     }
-    if (depth == 5 && strstr(func_name, "_dl_catch_exception")) {
+    if (depth == 5 && compareFuncName(func_name, "_dl_catch_exception")) {
         return std::make_pair(false, true);
     }
-    if (depth == 2 && (strstr(func_name, "_dl_signal_error") || strstr(func_name, "_dl_exception_create"))) {
+    if (depth == 2 && (compareFuncName(func_name, "_dl_signal_error") || compareFuncName(func_name, "_dl_exception_create"))) {
         return std::make_pair(true, true);
     }
-    if ((depth == 4 || depth == 5) && strstr(func_name, "dlerror")) {
+    if ((depth == 4 || depth == 5) && compareFuncName(func_name, "dlerror")) {
         return std::make_pair(false, true);
     }
-    if (strstr(func_name, "__libpthread_freeres")) {
+    if (compareFuncName(func_name, "__libpthread_freeres")) {
         // https://patches-gcc.linaro.org/patch/6525/
         return std::make_pair(false, true);
     }
