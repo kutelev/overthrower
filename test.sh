@@ -19,10 +19,10 @@ build_tests() {
 
 execute_tests() {
   if [[ "$(uname)" == "Linux" ]]; then
-    pip install pytest
+    python3 -m pip install pytest
     LD_LIBRARY_PATH=. LD_PRELOAD=liboverthrower.so ./overthrower_free_null
     LD_LIBRARY_PATH=. LD_PRELOAD=liboverthrower.so ./overthrower_tests
-    PATH="${PATH}:$(pwd)" LD_LIBRARY_PATH=. LD_PRELOAD=liboverthrower.so python -m pytest "${SOURCE_DIR}/tests.py" -v
+    PATH="${PATH}:$(pwd)" LD_LIBRARY_PATH=. LD_PRELOAD=liboverthrower.so python3 -m pytest "${SOURCE_DIR}/tests.py" -v
   elif [[ "$(uname)" == "Darwin" ]]; then
     DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=./Frameworks/overthrower.framework/Versions/Current/overthrower ./overthrower_free_null
     DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=./Frameworks/overthrower.framework/Versions/Current/overthrower ./overthrower_tests
