@@ -564,7 +564,7 @@ static std::pair<bool, bool> checker(unsigned int depth, uintptr_t, uintptr_t, c
         // https://sourceware.org/legacy-ml/libc-alpha/2013-09/msg00150.html
         return std::make_pair(false, true);
     }
-    if (compareFuncName(func_name, "_dl_catch_exception")) {
+    if ((depth == 4 || depth == 5) && compareFuncName(func_name, "_dl_catch_exception")) {
         return std::make_pair(false, true);
     }
     if (depth == 2 && (compareFuncName(func_name, "_dl_signal_error") || compareFuncName(func_name, "_dl_exception_create"))) {
