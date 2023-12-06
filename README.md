@@ -51,13 +51,13 @@ A necessary strategy can be chosen and configured via the following environment 
 * `OVERTHROWER_DURATION`
 
 	
-| Variable | Possible values | Description |
-| - | - | - |
-| `OVERTHROWER_STRATEGY` | `0` - `random`, `1` - `step`, `2` - `pulse`, `3` - `none` | Strategy to use. |
-| `OVERTHROWER_SEED` | Any 32-bit unsigned integer value. | A seed to initialize a generator of pseudo random numbers. Affects only `random` strategy. |
-| `OVERTHROWER_DUTY_CYCLE` | `[1;4096]` | Determines percentage of allocations which will be failed, 1 - 100% of allocations will fail, 2 - 50%. Affects only `random` strategy. |
-| `OVERTHROWER_DELAY` | `[0;1000000]` | Delay before Overthrower starts failing allocations. Affects `step` and `pulse` strategies. |
-| `OVERTHROWER_DURATION` | `[1;100]` | Count of allocations to fail. Affects only `pulse` strategy. |
+| Variable                 | Possible values                                           | Description                                                                                                                            |
+|--------------------------|-----------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------|
+| `OVERTHROWER_STRATEGY`   | `0` - `random`, `1` - `step`, `2` - `pulse`, `3` - `none` | Strategy to use.                                                                                                                       |
+| `OVERTHROWER_SEED`       | Any 32-bit unsigned integer value.                        | A seed to initialize a generator of pseudo random numbers. Affects only `random` strategy.                                             |
+| `OVERTHROWER_DUTY_CYCLE` | `[1;4096]`                                                | Determines percentage of allocations which will be failed, 1 - 100% of allocations will fail, 2 - 50%. Affects only `random` strategy. |
+| `OVERTHROWER_DELAY`      | `[0;1000000]`                                             | Delay before Overthrower starts failing allocations. Affects `step` and `pulse` strategies.                                            |
+| `OVERTHROWER_DURATION`   | `[1;100]`                                                 | Count of allocations to fail. Affects only `pulse` strategy.                                                                           |
 
 **Note:** `none` strategy does not fail any allocation. It only checks that all memory blocks which are allocated using either `malloc` or `free` are freed using `free`.
 All other strategies also perform this validation. If any memory blocks are not freed a user is informed about it. 
