@@ -385,7 +385,7 @@ static bool isTimeToFail(unsigned int malloc_seq_num) noexcept
         case STRATEGY_STEP:
             return malloc_seq_num >= g_delay;
         case STRATEGY_PULSE:
-            return malloc_seq_num > g_delay && malloc_seq_num <= g_delay + g_duration;
+            return malloc_seq_num >= g_delay && malloc_seq_num < g_delay + g_duration;
         case STRATEGY_NONE:
         default: // Just to make static code analyzers fully happy.
             return false;

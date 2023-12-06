@@ -584,8 +584,8 @@ TEST(Overthrower, StrategyStep) // NOLINT
 
     for (bool with_mutex : { true, false }) {
         for (unsigned int thread_count : thread_count_variants) {
-            if (thread_count == 1)
-                with_mutex = false;
+            if (thread_count == 1 && with_mutex)
+                continue;
             for (unsigned int delay : delay_variants) {
                 const std::string expected_pattern = generateExpectedPattern(STRATEGY_STEP, iterations, delay);
 
@@ -642,8 +642,8 @@ TEST(Overthrower, StrategyPulse) // NOLINT
 
     for (bool with_mutex : { true, false }) {
         for (unsigned int thread_count : thread_count_variants) {
-            if (thread_count == 1)
-                with_mutex = false;
+            if (thread_count == 1 && with_mutex)
+                continue;
             for (unsigned int delay : delay_variants) {
                 for (unsigned int duration : duration_variants) {
                     const std::string expected_pattern = generateExpectedPattern(STRATEGY_PULSE, iterations, delay, duration);
