@@ -636,7 +636,7 @@ void* my_malloc(size_t size) noexcept
         return nonFailingMalloc(size);
 
     if (isTimeToFail(malloc_seq_num)) {
-        if (g_verbose_mode == VERBOSE_FAILED_ALLOCATIONS) {
+        if (g_verbose_mode >= VERBOSE_FAILED_ALLOCATIONS) {
             g_state.is_tracing = true;
             const unsigned int old_paused = g_state.paused[depth];
             g_state.paused[depth] = UINT_MAX;
@@ -669,7 +669,7 @@ void* my_malloc(size_t size) noexcept
             errno = ENOMEM;
             return nullptr;
         }
-        if (g_verbose_mode >= VERBOSE_FAILED_ALLOCATIONS) {
+        if (g_verbose_mode >= VERBOSE_ALL_ALLOCATIONS) {
             g_state.is_tracing = true;
             const unsigned int old_paused = g_state.paused[depth];
             g_state.paused[depth] = UINT_MAX;
